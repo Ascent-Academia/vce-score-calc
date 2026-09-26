@@ -98,7 +98,7 @@ export function AtarCalculator({ year, rows, setRows, extras, setExtras, onEstim
             );
           })}
         </div>
-        <button type="button" className="secondary" onClick={add}>
+        <button type="button" className="glass-btn" onClick={add}>
           + Add study
         </button>
 
@@ -131,13 +131,13 @@ export function AtarCalculator({ year, rows, setRows, extras, setExtras, onEstim
       </section>
 
       {entries.length > 0 && (
-        <div className="mobile-bar" aria-hidden="true">
+        <div className="mobile-bar glass" aria-hidden="true">
           <span>ATAR</span>
           <strong>{atar ? (atar.below30 ? '< 30' : atar.atar!.toFixed(2)) : '—'}</strong>
           <span>Aggregate {result.eligible ? result.aggregate.toFixed(2) : '–'}</span>
         </div>
       )}
-      <aside className="card result" aria-live="polite">
+      <aside className="card result glass" aria-live="polite">
         <p className="eyebrow">Estimated ATAR · {year} tables{year === LATEST_YEAR ? ' (latest)' : ''}</p>
         <p className="atar">{atar ? (atar.below30 ? '< 30' : atar.atar!.toFixed(2)) : '—'}</p>
         {!result.eligible && <p className="muted">{entries.length === 0 ? 'Add your studies to see your ATAR.' : result.reason}</p>}

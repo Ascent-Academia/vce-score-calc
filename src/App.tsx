@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
+import logo from './assets/ascent-logo.svg?raw';
+import mark from './assets/ascent-mark.svg?raw';
 import { AtarCalculator, newUid, type SubjectRow } from './components/AtarCalculator';
 import { StudyScoreCalculator } from './components/StudyScoreCalculator';
 import { ScalingTable } from './components/ScalingTable';
@@ -7,11 +9,11 @@ import { LATEST_YEAR, YEARS, getStudy } from './lib/data';
 import type { ExtraIncrements } from './lib/atar';
 
 type Tab = 'atar' | 'study' | 'scaling' | 'method';
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'atar', label: 'ATAR' },
-  { id: 'study', label: 'Study score' },
-  { id: 'scaling', label: 'Scaling' },
-  { id: 'method', label: 'Method & sources' },
+const TABS: { id: Tab; label: string; short: string }[] = [
+  { id: 'atar', label: 'ATAR', short: 'ATAR' },
+  { id: 'study', label: 'Study score', short: 'Study score' },
+  { id: 'scaling', label: 'Scaling', short: 'Scaling' },
+  { id: 'method', label: 'Method & sources', short: 'Method' },
 ];
 
 const STORAGE_KEY = 'vce-score-calc:v1';
@@ -93,20 +95,23 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="top">
-        <div className="brand">
-          <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
-            <rect width="32" height="32" rx="7" fill="var(--accent)" />
-            <path d="M8 22l5-6 4 3 7-9" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <div>
-            <h1>VCE Study Score &amp; ATAR Calculator</h1>
-            <p className="muted">Built on official VCAA and VTAC data</p>
-          </div>
+      <div className="backdrop" aria-hidden="true">
+        <span className="orb orb-1" />
+        <span className="orb orb-2" />
+        <span className="orb orb-3" />
+      </div>
+
+      <header className="top glass">
+        <a className="brand" href="https://ascentacademia.com.au/" target="_blank" rel="noreferrer" aria-label="Ascent Academia website">
+          <span className="logo" dangerouslySetInnerHTML={{ __html: logo }} />
+        </a>
+        <div className="brand-title">
+          <h1>VCE ATAR &amp; Study Score Calculator</h1>
+          <p>Built on official VCAA and VTAC data</p>
         </div>
         <div className="top-controls">
-          <label className="inline">
-            Data year
+          <label className="inline year">
+            <span>Data year</span>
             <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
               {YEARS.map((y) => (
                 <option key={y} value={y}>
@@ -117,17 +122,21 @@ export default function App() {
             </select>
           </label>
           {tab === 'atar' && (
-            <button type="button" className="secondary" onClick={share}>
+            <button type="button" className="glass-btn" onClick={share}>
               {copied ? 'Link copied' : 'Share'}
             </button>
           )}
         </div>
       </header>
 
-      <nav className="tabs" role="tablist" aria-label="Calculator sections">
+      <nav className="tabs glass" role="tablist" aria-label="Calculator sections" style={{ '--tab-index': TABS.findIndex((t) => t.id === tab), '--tab-count': TABS.length } as CSSProperties}>
+        <span className="tab-pill" aria-hidden="true" />
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
-            {t.label}
+            <span className="tab-long">{t.label}</span>
+            <span className="tab-short" aria-hidden="true">
+              {t.short}
+            </span>
           </button>
         ))}
       </nav>
@@ -160,7 +169,10 @@ export default function App() {
       </main>
 
       <footer className="foot">
-        Estimates only; not affiliated with VCAA or VTAC. Official results come from VCAA (study scores) and VTAC (ATAR).
+        <span className="foot-mark" dangerouslySetInnerHTML={{ __html: mark }} />
+        <span>
+          © {new Date().getFullYear()} <a href="https://ascentacademia.com.au/" target="_blank" rel="noreferrer">Ascent Academia</a>. Estimates only; not affiliated with VCAA or VTAC. Official results come from VCAA (study scores) and VTAC (ATAR).
+        </span>
       </footer>
     </div>
   );

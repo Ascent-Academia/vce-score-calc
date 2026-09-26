@@ -1,6 +1,6 @@
-# VCE Study Score & ATAR Calculator
+# Ascent Academia · VCE Study Score & ATAR Calculator
 
-A web app that estimates VCE study scores and ATARs using only official VCAA and VTAC data.
+A web app by [Ascent Academia](https://ascentacademia.com.au/) that estimates VCE study scores and ATARs using only official VCAA and VTAC data.
 
 - **Study score estimator**: enter SAC and exam percentages for any of 117 studies. It uses VCAA's statewide results for every graded assessment (mean, standard deviation, grade cut-offs and grade counts), the official weighting of each assessment and VCAA's published study score formula. It shows your grade on each assessment, your estimated study score with a likely range, and the exam score you need to reach a target.
 - **ATAR calculator**: turns study scores into VTAC scaled scores, then builds the aggregate using VTAC's rules: English plus the best three in the primary four, 10% increments cut to 2 decimal places, grouping limits, equivalent studies, non-scored VET and higher education increments. The aggregate converts to an ATAR with VTAC's official aggregate-to-ATAR table.

@@ -147,7 +147,7 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
         )}
       </section>
 
-      <aside className="card result" aria-live="polite">
+      <aside className="card result glass" aria-live="polite">
         <p className="eyebrow">Estimated study score{study ? ` · ${study.name}` : ''}</p>
         <p className="atar">{estimate ? estimate.rounded : '—'}</p>
         {estimate && (
@@ -165,7 +165,7 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                 <dd>{scaled != null ? scaled.toFixed(2) : '–'}</dd>
               </div>
             </dl>
-            <button type="button" className="primary" onClick={() => onUse(study!.id, estimate.rounded)}>
+            <button type="button" className="glass-btn prominent block" onClick={() => onUse(study!.id, estimate.rounded)}>
               {useLabel}
             </button>
             <div className="target">
