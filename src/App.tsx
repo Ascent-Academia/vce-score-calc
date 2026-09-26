@@ -1,10 +1,12 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import logo from './assets/ascent-logo.svg?raw';
 import mark from './assets/ascent-mark.svg?raw';
 import { AtarCalculator, newUid, type SubjectRow } from './components/AtarCalculator';
 import { StudyScoreCalculator } from './components/StudyScoreCalculator';
 import { ScalingTable } from './components/ScalingTable';
 import { Methodology } from './components/Methodology';
+import { GlassSelect } from './components/GlassSelect';
+import { TabBar } from './components/TabBar';
 import { LATEST_YEAR, YEARS, getStudy } from './lib/data';
 import type { ExtraIncrements } from './lib/atar';
 
@@ -110,17 +112,12 @@ export default function App() {
           <p>Built on official VCAA and VTAC data</p>
         </div>
         <div className="top-controls">
-          <label className="inline year">
-            <span>Data year</span>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-              {YEARS.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                  {y === LATEST_YEAR ? ' (latest)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
+          <GlassSelect
+            label="Data year"
+            value={year}
+            onChange={setYear}
+            options={YEARS.map((y) => ({ value: y, label: String(y), hint: y === LATEST_YEAR ? 'Latest' : undefined }))}
+          />
           {tab === 'atar' && (
             <button type="button" className="glass-btn" onClick={share}>
               {copied ? 'Link copied' : 'Share'}
@@ -129,17 +126,7 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="tabs glass" role="tablist" aria-label="Calculator sections" style={{ '--tab-index': TABS.findIndex((t) => t.id === tab), '--tab-count': TABS.length } as CSSProperties}>
-        <span className="tab-pill" aria-hidden="true" />
-        {TABS.map((t) => (
-          <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
-            <span className="tab-long">{t.label}</span>
-            <span className="tab-short" aria-hidden="true">
-              {t.short}
-            </span>
-          </button>
-        ))}
-      </nav>
+      <TabBar tabs={TABS} value={tab} onChange={setTab} />
 
       <main>
         {tab === 'atar' && (
