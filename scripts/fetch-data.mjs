@@ -2,7 +2,7 @@
 // Run `npm run data:fetch`, then `npm run data:build` to regenerate src/data/*.json.
 import { mkdir, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
-import { VTAC_FILES, GA_YEAR } from './sources.mjs';
+import { VTAC_FILES, GA_YEAR, SSCAI_PAGE, SSCAI_YEARS } from './sources.mjs';
 
 const RAW = new URL('../data/raw/', import.meta.url).pathname;
 const VTAC = 'https://vtac.edu.au/files/pdf/reports';
@@ -50,6 +50,16 @@ async function main() {
     `${VCAA}/administration/vce-administrative-handbook/vce-and-vet-assessment-summary`,
     join(RAW, 'vcaa', 'assessment-summary.html'),
   ]);
+
+  // VCAA per-school results (one spreadsheet per year), linked from the SSCAI page.
+  const sscaiIndex = join(RAW, 'vcaa', 'sscai-index.html');
+  await download(SSCAI_PAGE, sscaiIndex);
+  const sscaiHtml = await (await import('node:fs/promises')).readFile(sscaiIndex, 'utf8');
+  for (const y of SSCAI_YEARS) {
+    const href = [...sscaiHtml.matchAll(/href="([^"]+\.xlsx)"/g)].map((m) => m[1]).find((h) => h.includes(String(y)) && /Completion/i.test(h));
+    if (!href) throw new Error(`No SSCAI spreadsheet for ${y} on the VCAA page`);
+    jobs.push([new URL(href, VCAA).href, join(RAW, 'vcaa', `sscai-${y}.xlsx`)]);
+  }
 
   // VCAA grade distribution index page, then one PDF per study.
   const indexUrl = `${VCAA}/administration/school-administration/performance-senior-secondary/${GA_YEAR}-grade-distributions-vce-graded-assessments`;

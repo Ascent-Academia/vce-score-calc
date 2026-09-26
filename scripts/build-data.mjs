@@ -2,7 +2,8 @@
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pdfItems, pdfRows } from './pdf-text.mjs';
-import { VTAC_FILES, GA_YEAR } from './sources.mjs';
+import { VTAC_FILES, GA_YEAR, SSCAI_PAGE, SSCAI_YEARS } from './sources.mjs';
+import readXlsxFile from 'read-excel-file/node';
 
 const RAW = new URL('../data/raw/', import.meta.url).pathname;
 const OUT = new URL('../src/data/', import.meta.url).pathname;
@@ -322,6 +323,59 @@ function buildCatalogue(scaling, gaFiles, weights) {
   return { studies, smallLote: small, unmatchedGa: gaFiles.filter((g) => !used.has(g.file)).map((g) => g.file) };
 }
 
+
+// ---------------------------------------------------------------------------
+// VCAA SSCAI: per-school median study score and % of study scores 40+.
+// Columns are located by header text so layout changes between years are caught.
+// ---------------------------------------------------------------------------
+async function parseSscai(year) {
+  const [{ data: rows }] = await readXlsxFile(join(RAW, 'vcaa', `sscai-${year}.xlsx`));
+  const h = rows.findIndex((r) => r[0] === 'School');
+  if (h < 0) throw new Error(`SSCAI ${year}: header row not found`);
+  const header = rows[h].map((c) => String(c ?? '').replace(/\s+/g, ' ').trim());
+  const col = (re) => {
+    const i = header.findIndex((c) => re.test(c));
+    if (i < 0) throw new Error(`SSCAI ${year}: column ${re} not found`);
+    return i;
+  };
+  const cName = 0;
+  const cLocality = col(/^Locality$/i);
+  const cStudents = col(/^Number of students enrolled in at least one VCE/i);
+  const cMedian = col(/^Median VCE study score$/i);
+  const cP40 = col(/^Percentage of study scores of 40 and over$/i);
+  const out = [];
+  for (const r of rows.slice(h + 1)) {
+    const name = typeof r[cName] === 'string' ? r[cName].trim() : '';
+    if (!name) continue;
+    const median = typeof r[cMedian] === 'number' ? r[cMedian] : null;
+    const p40 = typeof r[cP40] === 'number' ? r[cP40] : null;
+    const students = typeof r[cStudents] === 'number' ? r[cStudents] : null;
+    if (median === null) continue; // no VCE study scores (VM-only, small or I/D)
+    out.push({ name, locality: String(r[cLocality] ?? '').trim(), median, p40, students });
+  }
+  if (out.length < 300) throw new Error(`SSCAI ${year}: only ${out.length} schools parsed`);
+  for (const s of out) {
+    if (s.median < 10 || s.median > 50 || (s.p40 !== null && (s.p40 < 0 || s.p40 > 100))) throw new Error(`SSCAI ${year}: bad row ${JSON.stringify(s)}`);
+  }
+  return out;
+}
+
+async function buildSchools() {
+  const byKey = new Map();
+  for (const y of SSCAI_YEARS) {
+    for (const s of await parseSscai(y)) {
+      const key = `${s.name.toLowerCase()}|${s.locality.toLowerCase()}`;
+      if (!byKey.has(key)) byKey.set(key, { name: s.name, locality: s.locality, years: {} });
+      const e = byKey.get(key);
+      e.name = s.name;
+      e.years[y] = [s.median, s.p40, s.students];
+    }
+  }
+  const latest = SSCAI_YEARS.at(-1);
+  // Keep schools with results in the latest year; older years only refine the average.
+  return [...byKey.values()].filter((s) => s.years[latest]).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true });
 
@@ -352,7 +406,14 @@ async function main() {
   if (unmatchedGa.length) console.log(`catalogue: unmatched VCAA files: ${unmatchedGa.join(', ')}`);
   console.log(`catalogue: ${studies.length} studies, ${studies.filter((s) => s.assessment).length} with study score data`);
 
+  const schools = await buildSchools();
+  console.log(`VCAA SSCAI ${SSCAI_YEARS.join('/')}: ${schools.length} schools`);
+
   await writeFile(join(OUT, 'studies.json'), JSON.stringify({ meta, smallLote, studies }) + '\n');
+  await writeFile(
+    join(OUT, 'schools.json'),
+    JSON.stringify({ source: SSCAI_PAGE, years: SSCAI_YEARS, fields: ['median', 'p40', 'students'], schools }) + '\n',
+  );
   await writeFile(join(OUT, 'atar.json'), JSON.stringify({ meta, years: atar }) + '\n');
 }
 

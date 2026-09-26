@@ -12,3 +12,9 @@ export const VTAC_FILES = {
 
 // Year of VCAA graded assessment distributions (published each April for the previous year).
 export const GA_YEAR = 2025;
+
+// VCAA Senior Secondary Completion and Achievement Information (per-school median study
+// score and % of study scores of 40+), averaged over these years for SAC moderation.
+export const SSCAI_PAGE =
+  'https://www.vcaa.vic.edu.au/administration/school-administration/performance-senior-secondary/senior-secondary-completion-and-achievement-information';
+export const SSCAI_YEARS = [2023, 2024, 2025];

@@ -1,4 +1,5 @@
 import { META, YEARS } from '../lib/data';
+import { SCHOOL_SOURCE, SCHOOL_YEARS } from '../lib/moderation';
 
 export function Methodology() {
   const s = META.sources;
@@ -21,6 +22,22 @@ export function Methodology() {
         <strong>What can't be known:</strong> VCAA doesn't publish how strongly students' results on different GAs move together. The model links them with a correlation of 0.8 and
         shows the range for 0.7–0.9. SAC scores are statistically moderated against each school's exam results, so enter your expected moderated SAC percentage. This year's exams and
         cut-offs will also differ slightly from {META.gaYear}.
+      </p>
+
+      <h3>SAC moderation (optional)</h3>
+      <p>
+        VCAA statistically moderates each school's SAC scores. It keeps the school's rank order but rescales the scores so their average and spread match the same
+        students' exam results. The same rank is worth more at a school whose students do well on the exams.
+      </p>
+      <p>
+        In <strong>My rank at school</strong> mode the calculator estimates this. Your rank (for example 3rd of 25) gives your position inside your school. The school's
+        published VCAA results give how strong and how spread out its students are statewide: its median study score sets the level, and its percentage of study
+        scores of 40+ sets the spread, averaged over {SCHOOL_YEARS[0]}–{SCHOOL_YEARS.at(-1)}. Together they give your statewide percentile, which is converted to a
+        SAC score using VCAA's statewide SAC distribution. School-assessed tasks aren't statistically moderated, so they're left as entered.
+      </p>
+      <p>
+        <strong>Limits:</strong> the school figures cover all subjects, not just the one you're estimating, and VCAA uses your classmates' actual exam results,
+        which aren't known in advance. The range shown allows for a study's cohort sitting about 1.4 study score points above or below the school overall.
       </p>
 
       <h3>2. Scaling (VTAC)</h3>
@@ -63,6 +80,12 @@ export function Methodology() {
             VCAA {META.gaYear} grade distributions for VCE graded assessments
           </a>{' '}
           (one PDF per study)
+        </li>
+        <li>
+          <a href={SCHOOL_SOURCE} target="_blank" rel="noreferrer">
+            VCAA Senior Secondary Completion and Achievement Information
+          </a>{' '}
+          ({SCHOOL_YEARS.join(', ')}; per-school median study score and % of study scores 40+)
         </li>
         <li>
           <a href={s.weights} target="_blank" rel="noreferrer">
