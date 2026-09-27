@@ -64,7 +64,22 @@ export default function App() {
   const [year, setYear] = useState(initial.year);
   const [rows, setRows] = useState<SubjectRow[]>(initial.rows);
   const [extras, setExtras] = useState<ExtraIncrements>(initial.extras);
-  const [estimateFor, setEstimateFor] = useState<{ studyId: string | null; uid: string | null }>({ studyId: 'NJ', uid: null });
+  const [estimateFor, setEstimateFor] = useState<{ studyId: string | null; uid: string | null }>(() => {
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}:estimateStudy`);
+      if (saved && getStudy(saved)?.assessment) return { studyId: saved, uid: null };
+    } catch {
+      /* storage unavailable */
+    }
+    return { studyId: 'NJ', uid: null };
+  });
+  useEffect(() => {
+    try {
+      if (estimateFor.studyId) localStorage.setItem(`${STORAGE_KEY}:estimateStudy`, estimateFor.studyId);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [estimateFor.studyId]);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

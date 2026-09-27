@@ -1321,3 +1321,13 @@ details.rank-fallback summary {
 details.rank-fallback label {
   margin-top: 8px;
 }
+
+.pending {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.hint.pending-note {
+  background: var(--warn-soft);
+  margin-top: 12px;
+}

@@ -41,6 +41,15 @@ const store = {
   },
 };
 
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = store.get(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function strengthFor(key: string | null): SchoolStrength | null {
   if (!key) return null;
   const preset = presetStrength(key);
@@ -78,14 +87,20 @@ const pct = (x: number) => `${(x * 100).toFixed(x > 0.995 || x < 0.005 ? 1 : 0)}
 
 export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabel }: Props) {
   const study = (studyId && getStudy(studyId)?.assessment ? getStudy(studyId) : null) as Study | null;
-  const [inputs, setInputs] = useState<Inputs>({});
+  const [inputs, setInputs] = useState<Inputs>(() => loadJson('studyInputs', {}));
   const [rho, setRho] = useState(DEFAULT_RHO);
   const [targetInput, setTarget] = useState<string | null>(null);
   const [sacMode, setSacModeState] = useState<SacMode>(() => (store.get('sacMode') === 'rank' ? 'rank' : 'score'));
   const [school, setSchoolState] = useState<string | null>(() => store.get('school'));
-  const [ranks, setRanks] = useState<Ranks>({});
-  const [averages, setAverages] = useState<ClassAverages>({});
-  const [classSd, setClassSd] = useState(String(DEFAULT_CLASS_SD));
+  const [ranks, setRanks] = useState<Ranks>(() => loadJson('sacRanks', {}));
+  const [averages, setAverages] = useState<ClassAverages>(() => loadJson('sacAverages', {}));
+  const [classSd, setClassSd] = useState(() => store.get('classSd') ?? String(DEFAULT_CLASS_SD));
+
+  // Keep each study's entries when switching tabs or reloading.
+  useEffect(() => store.set('studyInputs', JSON.stringify(inputs)), [inputs]);
+  useEffect(() => store.set('sacRanks', JSON.stringify(ranks)), [ranks]);
+  useEffect(() => store.set('sacAverages', JSON.stringify(averages)), [averages]);
+  useEffect(() => store.set('classSd', classSd), [classSd]);
   const setSacMode = (m: SacMode) => {
     setSacModeState(m);
     store.set('sacMode', m);
@@ -139,12 +154,15 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
             mod = moderatedSac(ga, rankN, cohortN, strength);
             basis = { kind: 'rank' };
           }
-          return { ga, values: v, start, raw, mod, basis, score: mod ? mod.score : null };
+          // Until the school and a class average (or rank) are set, use the SAC % as entered
+          // so the estimate never goes blank.
+          return { ga, values: v, start, raw, mod, basis, pending: !mod, score: mod ? mod.score : raw };
         }
-        return { ga, values: v, start, raw, mod: null, basis: null, score: raw };
+        return { ga, values: v, start, raw, mod: null, basis: null, pending: false, score: raw };
       })
     : [];
   const complete = perGa.length > 0 && perGa.every((g) => g.score !== null);
+  const pendingCount = perGa.filter((g) => g.pending).length;
   const scores = perGa.map((g) => g.score ?? 0);
   const estimate = useMemo(() => {
     if (!study || !complete) return null;
@@ -243,7 +261,7 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
 
         {study && (
           <div className="ga-list">
-            {perGa.map(({ ga, values: v, start, score, raw, mod, basis }) => (
+            {perGa.map(({ ga, values: v, start, score, raw, mod, basis, pending }) => (
               <fieldset key={ga.ga} className="ga">
                 <legend>
                   GA{ga.ga}: {ga.components ? 'Examination (oral + written)' : ga.label} <span className="weight">{ga.weight}%</span>
@@ -292,6 +310,11 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                               : ` · from rank ${rankN} of ${cohortN}${raw !== null ? ` · ${rawVsModerated(raw, score, ga.max)}` : ''}`}
                             {' '}· above {pct(gaCdf(ga, score))} of students
                           </small>
+                        ) : pending ? (
+                          <small className="muted">
+                            {score.toFixed(ga.max >= 100 ? 0 : 1)}/{ga.max} as entered ·{' '}
+                            <span className="pending">{strength ? 'add the class average (or your rank above) to adjust for your school' : 'pick your school above to adjust it'}</span>
+                          </small>
                         ) : (
                           <small className="muted">
                             {score.toFixed(ga.max >= 100 ? 0 : 1)}/{ga.max} · above {pct(gaCdf(ga, score))} of {ga.n.toLocaleString()} students
@@ -300,7 +323,7 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                       </>
                     ) : (
                       <small className="muted">
-                        {moderating && isModerated(ga) ? (strength ? 'Enter your SAC % and class average (or your rank above)' : 'Pick your school above') : 'Enter a percentage'}
+                        {moderating && isModerated(ga) ? 'Enter your SAC % (and class average to adjust it)' : 'Enter a percentage'}
                       </small>
                     )}
                   </div>
@@ -359,6 +382,12 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
               </p>
             </div>
           </>
+        )}
+        {estimate && pendingCount > 0 && (
+          <p className="hint pending-note">
+            {pendingCount === 1 ? '1 SAC isn\'t' : `${pendingCount} SACs aren't`} adjusted for your school yet, so {pendingCount === 1 ? 'it uses' : 'they use'} your SAC % as entered.
+            {strength ? ' Add the class average (or your rank) to adjust.' : ' Pick your school to adjust.'}
+          </p>
         )}
         <p className="fineprint">
           {moderating
