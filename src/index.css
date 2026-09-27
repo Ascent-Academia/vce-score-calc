@@ -1306,3 +1306,18 @@ fieldset.moderation p {
 strong.moderated {
   color: var(--accent);
 }
+
+details.rank-fallback {
+  margin-top: 8px;
+}
+
+details.rank-fallback summary {
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+details.rank-fallback label {
+  margin-top: 8px;
+}

@@ -30,10 +30,12 @@ export function Methodology() {
         students' exam results. The same rank is worth more at a school whose students do well on the exams.
       </p>
       <p>
-        In <strong>My rank at school</strong> mode the calculator estimates this. Your rank (for example 3rd of 25) gives your position inside your school. The school's
-        published VCAA results give how strong and how spread out its students are statewide: its median study score sets the level, and its percentage of study
-        scores of 40+ sets the spread, averaged over {SCHOOL_YEARS[0]}–{SCHOOL_YEARS.at(-1)}. Together they give your statewide percentile, which is converted to a
-        SAC score using VCAA's statewide SAC distribution. School-assessed tasks aren't statistically moderated, so they're left as entered.
+        In <strong>Adjust for my school</strong> mode the calculator estimates this. For each SAC you enter your percentage and your class average. How far you
+        sit above or below the average, measured against the class spread (default 12 percentage points, typically 10–15), gives your position inside your school.
+        That is what VCAA's linear rescale keeps. If you only know your rank (for example 3rd of 25), that can be used instead. The school's published VCAA results
+        give how strong and how spread out its students are statewide: its median study score sets the level, and its percentage of study scores of 40+ sets the
+        spread, averaged over {SCHOOL_YEARS[0]}–{SCHOOL_YEARS.at(-1)}. Together they give your statewide percentile, which is converted to a SAC score using VCAA's
+        statewide SAC distribution. School-assessed tasks aren't statistically moderated, so they're left as entered.
       </p>
       <p>
         <strong>Limits:</strong> the school figures cover all subjects, not just the one you're estimating, and VCAA uses your classmates' actual exam results,

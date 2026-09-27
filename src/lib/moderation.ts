@@ -11,8 +11,10 @@
 // averaged over several years. Study scores are on a mean 30 / SD 7 normal scale, so
 //   school mean (z)  ≈ (median − 30) / 7
 //   school SD  (z)   ≈ (39.5 − median) / Φ⁻¹(1 − p40) / 7
-// The student's statewide position is  z = mean + SD · z_within, where z_within comes
-// from their rank, and the moderated SAC is the statewide SAC score at that percentile.
+// The student's statewide position is  z = mean + SD · z_within, and the moderated SAC
+// is the statewide SAC score at that percentile. z_within comes from the SAC score
+// relative to the class average (VCAA's own linear rescale), or from rank if that's
+// all the student knows.
 import schoolsJson from '../data/schools.json';
 import type { GradedAssessment, Study } from './data';
 import { gaQuantile } from './studyScore';
@@ -115,6 +117,17 @@ export function withinSchoolZ(rank: number, cohort: number): number {
   return normInv((n - r + 0.5) / n);
 }
 
+/** Default spread (SD, percentage points) of SAC scores within a school class. */
+export const DEFAULT_CLASS_SD = 12;
+
+/**
+ * Position within the school from the SAC score itself, as in VCAA's linear rescale:
+ * (your SAC − class average) / class spread.
+ */
+export function withinSchoolZFromScore(scorePct: number, classAvgPct: number, classSdPct = DEFAULT_CLASS_SD): number {
+  return (scorePct - classAvgPct) / Math.max(1, classSdPct);
+}
+
 export interface ModeratedSac {
   /** Moderated score on the GA's VCAA scale (0..ga.max). */
   score: number;
@@ -122,15 +135,21 @@ export interface ModeratedSac {
   high: number;
   /** Statewide percentile of the moderated score. */
   percentile: number;
+  /** Position within the school used (z-score). */
+  zWithin: number;
+}
+
+/** Moderated SAC score for a GA from a within-school position (z) and school strength. */
+export function moderatedSacFromZ(ga: GradedAssessment, zWithin: number, strength: SchoolStrength): ModeratedSac {
+  const at = (shift: number) => {
+    const p = normCdf(strength.mean + shift + strength.sd * zWithin);
+    return { p, score: gaQuantile(ga, Math.min(0.9995, Math.max(0.0005, p))) };
+  };
+  const mid = at(0);
+  return { score: mid.score, low: at(-SUBJECT_UNCERTAINTY).score, high: at(SUBJECT_UNCERTAINTY).score, percentile: mid.p, zWithin };
 }
 
 /** Estimated moderated SAC score for a GA from rank and school strength. */
 export function moderatedSac(ga: GradedAssessment, rank: number, cohort: number, strength: SchoolStrength): ModeratedSac {
-  const zw = withinSchoolZ(rank, cohort);
-  const at = (shift: number) => {
-    const p = normCdf(strength.mean + shift + strength.sd * zw);
-    return { p, score: gaQuantile(ga, Math.min(0.9995, Math.max(0.0005, p))) };
-  };
-  const mid = at(0);
-  return { score: mid.score, low: at(-SUBJECT_UNCERTAINTY).score, high: at(SUBJECT_UNCERTAINTY).score, percentile: mid.p };
+  return moderatedSacFromZ(ga, withinSchoolZ(rank, cohort), strength);
 }

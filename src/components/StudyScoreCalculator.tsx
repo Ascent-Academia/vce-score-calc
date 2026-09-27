@@ -4,7 +4,7 @@ import { DEFAULT_RHO, estimateStudyScore, gaCdf, gaQuantile, gradeFor, requiredS
 import { scaledScore } from '../lib/scaling';
 import { StudyPicker } from './StudyPicker';
 import { SchoolPicker } from './SchoolPicker';
-import { SCHOOL_YEARS, findSchool, isModerated, moderatedSac, presetStrength, schoolStrength, type ModeratedSac, type SchoolStrength } from '../lib/moderation';
+import { DEFAULT_CLASS_SD, SCHOOL_YEARS, findSchool, isModerated, moderatedSac, moderatedSacFromZ, presetStrength, schoolStrength, withinSchoolZFromScore, type ModeratedSac, type SchoolStrength } from '../lib/moderation';
 
 const MODELLED = STUDIES.filter((s) => s.assessment);
 
@@ -19,6 +19,9 @@ interface Props {
 type Inputs = Record<string, string[]>;
 type SacMode = 'score' | 'rank';
 type Ranks = Record<string, { rank: string; cohort: string }>;
+/** Class average % per study, keyed by GA number. */
+type ClassAverages = Record<string, Record<number, string>>;
+type ModBasis = { kind: 'average'; avg: number } | { kind: 'rank' };
 
 const store = {
   get(key: string): string | null {
@@ -63,6 +66,13 @@ function toGaScore(ga: GradedAssessment, values: string[]): number | null {
   return (Math.max(0, Math.min(100, pct / w)) / 100) * ga.max;
 }
 
+/** "raw 85% ↓" comparing rounded percentages, so equal-looking numbers don't show an arrow. */
+function rawVsModerated(raw: number, moderated: number, max: number): string {
+  const r = Math.round((raw / max) * 100);
+  const m = Math.round((moderated / max) * 100);
+  return `raw ${r}%${m > r ? ' ↑' : m < r ? ' ↓' : ''}`;
+}
+
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const pct = (x: number) => `${(x * 100).toFixed(x > 0.995 || x < 0.005 ? 1 : 0)}%`;
 
@@ -74,6 +84,8 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
   const [sacMode, setSacModeState] = useState<SacMode>(() => (store.get('sacMode') === 'rank' ? 'rank' : 'score'));
   const [school, setSchoolState] = useState<string | null>(() => store.get('school'));
   const [ranks, setRanks] = useState<Ranks>({});
+  const [averages, setAverages] = useState<ClassAverages>({});
+  const [classSd, setClassSd] = useState(String(DEFAULT_CLASS_SD));
   const setSacMode = (m: SacMode) => {
     setSacModeState(m);
     store.set('sacMode', m);
@@ -102,6 +114,9 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
   const cohortN = Number(rankInput.cohort);
   const rankValid = Number.isInteger(rankN) && Number.isInteger(cohortN) && cohortN >= 2 && rankN >= 1 && rankN <= cohortN;
   const setRank = (patch: Partial<{ rank: string; cohort: string }>) => study && setRanks({ ...ranks, [study.id]: { ...rankInput, ...patch } });
+  const studyAverages = (study && averages[study.id]) || {};
+  const setAverage = (ga: number, v: string) => study && setAverages({ ...averages, [study.id]: { ...studyAverages, [ga]: v } });
+  const sdN = Number(classSd) > 0 ? Number(classSd) : DEFAULT_CLASS_SD;
 
   let offset = 0;
   const perGa = study
@@ -112,10 +127,21 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
         offset += n;
         const raw = toGaScore(ga, v);
         if (moderating && isModerated(ga)) {
-          const mod: ModeratedSac | null = strength && rankValid ? moderatedSac(ga, rankN, cohortN, strength) : null;
-          return { ga, values: v, start, raw, mod, score: mod ? mod.score : null };
+          // Prefer your SAC % against the class average (VCAA's linear rescale); fall back to rank.
+          const avgText = studyAverages[ga.ga] ?? '';
+          const avg = avgText === '' ? NaN : Number(avgText);
+          let mod: ModeratedSac | null = null;
+          let basis: ModBasis | null = null;
+          if (strength && raw !== null && Number.isFinite(avg)) {
+            mod = moderatedSacFromZ(ga, withinSchoolZFromScore((raw / ga.max) * 100, avg, sdN), strength);
+            basis = { kind: 'average', avg };
+          } else if (strength && rankValid) {
+            mod = moderatedSac(ga, rankN, cohortN, strength);
+            basis = { kind: 'rank' };
+          }
+          return { ga, values: v, start, raw, mod, basis, score: mod ? mod.score : null };
         }
-        return { ga, values: v, start, raw, mod: null, score: raw };
+        return { ga, values: v, start, raw, mod: null, basis: null, score: raw };
       })
     : [];
   const complete = perGa.length > 0 && perGa.every((g) => g.score !== null);
@@ -169,12 +195,12 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                 My SAC %
               </button>
               <button type="button" role="radio" aria-checked={sacMode === 'rank'} className={sacMode === 'rank' ? 'on' : ''} onClick={() => setSacMode('rank')}>
-                My rank at school
+                Adjust for my school
               </button>
             </div>
             {sacMode === 'score' ? (
               <p className="muted small">
-                Your SAC percentage is used as entered. VCAA moderates SACs against each school's exam results, so switch to <strong>My rank at school</strong> for an estimate of your moderated SAC score.
+                Your SAC percentage is used as entered. VCAA moderates SACs against each school's exam results, so switch to <strong>Adjust for my school</strong> for an estimate of your moderated SAC score.
               </p>
             ) : (
               <>
@@ -184,6 +210,23 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                     <SchoolPicker value={school} onChange={setSchool} />
                   </label>
                   <label>
+                    Class spread
+                    <span className="rank-input">
+                      <input type="number" min={1} max={40} value={classSd} onChange={(e) => setClassSd(e.target.value)} aria-label="Class spread (standard deviation, percentage points)" />
+                      <span>% SD</span>
+                    </span>
+                  </label>
+                </div>
+                <p className="muted small">
+                  {strength
+                    ? `${findSchool(school ?? '') ? `${SCHOOL_YEARS[0]}–${String(SCHOOL_YEARS.at(-1)).slice(2)} VCAA results: ` : ''}median study score ${strength.median.toFixed(1)}${strength.p40 !== null ? `, ${strength.p40.toFixed(1)}% of study scores 40+` : ''}. `
+                    : "Pick your school (or a rough level if it isn't listed). "}
+                  For each SAC below, enter <strong>your %</strong> and your <strong>class average %</strong>. VCAA keeps how far above or below the average you are
+                  (measured against the class spread, typically 10–15%) and rescales it to your school's exam results.
+                </p>
+                <details className="rank-fallback">
+                  <summary>Don't know the class average? Use your rank instead</summary>
+                  <label>
                     SAC rank in {study.name}
                     <span className="rank-input">
                       <input type="number" min={1} value={rankInput.rank} placeholder="e.g. 3" onChange={(e) => setRank({ rank: e.target.value })} aria-label="Your SAC rank" />
@@ -191,14 +234,8 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                       <input type="number" min={2} value={rankInput.cohort} onChange={(e) => setRank({ cohort: e.target.value })} aria-label="Students in this study at your school" />
                     </span>
                   </label>
-                </div>
-                <p className="muted small">
-                  {strength
-                    ? `${findSchool(school ?? '') ? `${SCHOOL_YEARS[0]}–${String(SCHOOL_YEARS.at(-1)).slice(2)} VCAA results: ` : ''}median study score ${strength.median.toFixed(1)}${strength.p40 !== null ? `, ${strength.p40.toFixed(1)}% of study scores 40+` : ''}. `
-                    : 'Pick your school (or a rough level if it isn\'t listed). '}
-                  {!rankValid && 'Enter your rank (1 = top) and how many students take this study at your school. '}
-                  VCAA keeps your rank and rescales your school's SACs to match its exam results.
-                </p>
+                  <small className="muted">Used for any SAC without a class average (1 = top of the cohort).</small>
+                </details>
               </>
             )}
           </fieldset>
@@ -206,7 +243,7 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
 
         {study && (
           <div className="ga-list">
-            {perGa.map(({ ga, values: v, start, score, raw, mod }) => (
+            {perGa.map(({ ga, values: v, start, score, raw, mod, basis }) => (
               <fieldset key={ga.ga} className="ga">
                 <legend>
                   GA{ga.ga}: {ga.components ? 'Examination (oral + written)' : ga.label} <span className="weight">{ga.weight}%</span>
@@ -217,7 +254,7 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                       {gaInputs(ga).length > 1
                         ? `${cap(c.title.replace(/^Examination: | component$/g, ''))} (${c.weight}%)`
                         : moderating && isModerated(ga)
-                          ? 'Raw school % (optional)'
+                          ? 'Your SAC %'
                           : 'Your score'}
                       <span className="pct-input">
                         <input type="number" min={0} max={100} step="any" value={v[k] ?? ''} onChange={(e) => setValue(start + k, e.target.value)} />
@@ -225,6 +262,24 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                       </span>
                     </label>
                   ))}
+                  {moderating && isModerated(ga) && (
+                    <label>
+                      Class average
+                      <span className="pct-input">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="any"
+                          placeholder="e.g. 72"
+                          value={studyAverages[ga.ga] ?? ''}
+                          onChange={(e) => setAverage(ga.ga, e.target.value)}
+                          aria-label={`Class average for GA${ga.ga}`}
+                        />
+                        <span>%</span>
+                      </span>
+                    </label>
+                  )}
                   <div className="ga-out">
                     {score !== null ? (
                       <>
@@ -232,7 +287,10 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                         {mod ? (
                           <small className="muted">
                             <strong className="moderated">≈ {((score / ga.max) * 100).toFixed(0)}% after moderation</strong> ({((mod.low / ga.max) * 100).toFixed(0)}–{((mod.high / ga.max) * 100).toFixed(0)}%)
-                            {raw !== null && ` · raw ${((raw / ga.max) * 100).toFixed(0)}% ${score > raw ? '↑' : score < raw ? '↓' : '='}`} · above {pct(gaCdf(ga, score))} of students
+                            {basis?.kind === 'average' && raw !== null
+                              ? ` · ${(Math.abs(mod.zWithin) < 0.05 ? 'at' : `${Math.abs((raw / ga.max) * 100 - basis.avg).toFixed(0)} points ${mod.zWithin > 0 ? 'above' : 'below'}`)} the class average · ${rawVsModerated(raw, score, ga.max)}`
+                              : ` · from rank ${rankN} of ${cohortN}${raw !== null ? ` · ${rawVsModerated(raw, score, ga.max)}` : ''}`}
+                            {' '}· above {pct(gaCdf(ga, score))} of students
                           </small>
                         ) : (
                           <small className="muted">
@@ -241,7 +299,9 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                         )}
                       </>
                     ) : (
-                      <small className="muted">{moderating && isModerated(ga) ? 'Pick your school and rank above' : 'Enter a percentage'}</small>
+                      <small className="muted">
+                        {moderating && isModerated(ga) ? (strength ? 'Enter your SAC % and class average (or your rank above)' : 'Pick your school above') : 'Enter a percentage'}
+                      </small>
                     )}
                   </div>
                 </div>
@@ -302,8 +362,8 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
         )}
         <p className="fineprint">
           {moderating
-            ? "Moderated SACs are estimated from your rank and your school's published VCAA results. Your class's actual exam results, which VCAA uses, aren't known in advance, so treat them as a range."
-            : "VCAA rescales each school's SAC scores to match how that school's students do on the exam, so your raw school percentage can move up or down. Use \"My rank at school\" to estimate it."}
+            ? "Moderated SACs are estimated from your position in your class and your school's published VCAA results. Your class's actual exam results, which VCAA uses, aren't known in advance, so treat them as a range."
+            : "VCAA rescales each school's SAC scores to match how that school's students do on the exam, so your raw school percentage can move up or down. Use \"Adjust for my school\" to estimate it."}
         </p>
       </aside>
     </div>

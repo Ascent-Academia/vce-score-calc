@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getStudy } from './data';
-import { SCHOOLS, findSchool, isModerated, moderatedGas, moderatedSac, presetStrength, schoolKey, schoolStrength, strengthFrom, withinSchoolZ } from './moderation';
+import { DEFAULT_CLASS_SD, SCHOOLS, findSchool, isModerated, moderatedGas, moderatedSac, moderatedSacFromZ, presetStrength, schoolKey, schoolStrength, strengthFrom, withinSchoolZ, withinSchoolZFromScore } from './moderation';
 import { gaCdf } from './studyScore';
 
 const methods = getStudy('NJ')!;
@@ -61,4 +61,23 @@ describe('moderated SAC', () => {
     expect(r.score).toBeGreaterThanOrEqual(0);
     expect(r.score).toBeLessThanOrEqual(sac.max);
   });
+
+  it('uses the SAC score relative to the class average like VCAA\'s linear rescale', () => {
+    expect(withinSchoolZFromScore(80, 80)).toBe(0);
+    expect(withinSchoolZFromScore(92, 80)).toBeCloseTo(12 / DEFAULT_CLASS_SD, 6);
+    expect(withinSchoolZFromScore(92, 80, 6)).toBeCloseTo(2, 6);
+    const strength = schoolStrength(byName(/^Box Hill High School$/));
+    const at = (pct: number) => moderatedSacFromZ(sac, withinSchoolZFromScore(pct, 75), strength).score;
+    // Higher raw SAC at the same school → higher moderated SAC; class average → school level.
+    expect(at(95)).toBeGreaterThan(at(85));
+    expect(at(85)).toBeGreaterThan(at(75));
+    expect(gaCdf(sac, at(75))).toBeCloseTo(normCdfLocal(strength.mean), 2);
+  });
 });
+
+function normCdfLocal(z: number) {
+  // Standard normal CDF via erf approximation, independent of the code under test.
+  const t = 1 / (1 + 0.5 * Math.abs(z / Math.SQRT2));
+  const y = t * Math.exp(-(z * z) / 2 - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
+  return z >= 0 ? 1 - y / 2 : y / 2;
+}
