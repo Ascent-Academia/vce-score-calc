@@ -13,19 +13,31 @@ A web app by [Ascent Academia](https://ascentacademia.com.au/) that estimates VC
 | --- | --- | --- |
 | Scaled scores | VTAC Scaling Reports 2021–2025 (integers at study scores 20, 25, …, 50) | Monotone cubic (PCHIP) interpolation; mean absolute error 0.20 (max 0.53) against all 23 two-decimal scaled scores in VTAC's own worked examples |
 | Aggregate → ATAR | VTAC aggregate-to-ATAR tables 2021–2025 (every 0.05 ATAR step) | Exact lookup; reproduces VTAC's worked examples (172.32 → 95.65, 136.17 → 80.30, 195.71 → 99.30, 103.36 → 57.15) |
-| Study score | VCAA 2025 grade distributions (110 studies) + VCAA assessment summary weights | Implements VCAA's method; the joint spread of students' results across assessments is simulated (Gaussian copula, correlation 0.8, range 0.7–0.9) because VCAA doesn't publish it |
+| Study score | VCAA 2025 grade distributions + VCAA assessment summary weights (117 catalogue entries with assessment data) | Implements VCAA's method; the joint spread of students' results across assessments is simulated (Gaussian copula, correlation 0.8, range 0.7–0.9) because VCAA doesn't publish it |
 | SAC moderation | VCAA Senior Secondary Completion and Achievement Information 2023–2025 (555 schools) | Rescales your position in the class (SAC vs class average, or rank) to the school's statewide level (median study score) and spread (% of study scores 40+); returns the statewide spread for statewide inputs |
 
 Limits: the moderation estimate uses whole-school results, not the specific study's cohort, and VCAA's real adjustment uses your classmates' exam results, which aren't known in advance. Future years' scaling, grade cut-offs and ATAR tables will differ slightly from the latest published year.
 
 ## Development
 
+Use **Node.js 22** (the version used by CI), with npm. The checked-in data contains
+127 study entries, 117 with assessment data, scaling/ATAR tables for 2021–2025,
+and 555 schools with results across 2023–2025. Normal development uses these JSON
+files directly; fetching the source documents is only needed when rebuilding data.
+
 ```bash
-npm install
-npm run dev        # local dev server
-npm test           # engine tests (vitest)
-npm run build      # static site in dist/
+npm ci             # install the locked dependencies
+npm run dev        # local Vite dev server
+npm run lint       # oxlint, also run by CI
+npm test           # engine tests (Vitest, one run)
+npm run build      # TypeScript check + static site in dist/
+npm run preview    # serve the built site locally
 ```
+
+The React interface lives in `src/`, calculation rules and their tests in
+`src/lib/`, and generated official data in `src/data/`. Vite uses a relative
+base (`./`), so `dist/` can be served from a GitHub Pages project path or another
+static host.
 
 ## Updating the data
 
@@ -36,7 +48,12 @@ npm run data:fetch   # downloads VTAC/VCAA PDFs and pages into data/raw/ (git-ig
 npm run data:build   # parses them into src/data/studies.json, atar.json and schools.json
 ```
 
-To add a new year, add its VTAC report filenames to `scripts/sources.mjs` (and bump `GA_YEAR` when VCAA publishes new grade distributions, usually around April). The build script checks the parsed data: ATAR tables must be contiguous in 0.05 steps, scaling rows must be monotone, grade counts must add up and weights must total 100%.
+To add a new year, add its VTAC report filenames to `scripts/sources.mjs`, bump
+`GA_YEAR` when VCAA publishes new grade distributions (usually around April), and
+update `SSCAI_YEARS` when new school results are available. Fetch and build, then
+run `npm test` and `npm run build` before committing the generated JSON. The build
+script checks the parsed data: ATAR tables must be contiguous in 0.05 steps,
+scaling rows must be monotone, grade counts must add up and weights must total 100%.
 
 Sources:
 - VTAC scaling reports and aggregate-to-ATAR tables: https://vtac.edu.au/reports and https://vtac.edu.au/reports/archive
@@ -47,7 +64,10 @@ Sources:
 
 ## Deployment
 
-`.github/workflows/deploy.yml` runs the tests and publishes `dist/` to GitHub Pages on every push to `main`. Turn it on in the repository under **Settings → Pages → Source: GitHub Actions**.
+`.github/workflows/deploy.yml` installs locked dependencies, runs lint and tests,
+and builds on pull requests, pushes to `main` and manual dispatch. It publishes
+`dist/` to GitHub Pages only for non-PR runs on `main`. Turn it on in the repository
+under **Settings → Pages → Source: GitHub Actions**.
 
 This is an independent estimate and is not affiliated with VCAA or VTAC.
 
