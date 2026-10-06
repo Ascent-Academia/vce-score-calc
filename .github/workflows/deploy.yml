@@ -17,7 +17,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    runs-on: ${{ fromJSON(vars.ASCENT_RUNNER_LINUX || vars.ASCENT_RUNNER_WINDOWS || (vars.ASCENT_RUNNER && '["self-hosted","Windows","X64"]') || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,7 +39,7 @@ jobs:
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.ASCENT_RUNNER_LINUX || vars.ASCENT_RUNNER_WINDOWS || (vars.ASCENT_RUNNER && '["self-hosted","Windows","X64"]') || '"ubuntu-latest"') }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
