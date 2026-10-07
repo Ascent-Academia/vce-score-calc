@@ -7,6 +7,20 @@ A web app by [Ascent Academia](https://ascentacademia.com.au/) that estimates VC
 - **ATAR calculator**: turns study scores into VTAC scaled scores, then builds the aggregate using VTAC's rules: English plus the best three in the primary four, 10% increments cut to 2 decimal places, grouping limits, equivalent studies, non-scored VET and higher education increments. The aggregate converts to an ATAR with VTAC's official aggregate-to-ATAR table.
 - **Scaling explorer**: every study's scaled scores for 2021–2025, sortable, with the change from the previous year.
 
+## Get Ascent apps through the package manager
+
+Download [**Ascent-Installer-Setup.exe** from Ascent Installer release Assets](https://github.com/Ascent-Academia/ascent-installer/releases/latest), run setup on Windows 10/11 x64, and open **Ascent Installer**. Sign in with your own GitHub account using the displayed browser device code; active Ascent-Academia membership and access to the relevant private repositories are required. Source-code ZIP/TAR downloads are developer files.
+
+In the catalogue, select **Browser apps → VCE Study Score & ATAR Calculator → Open app guide**.
+
+The calculator runs in your browser. The catalogue opens this guide; it does not install a Windows executable. Browser refreshes receive the deployed site updates.
+
+For the supported Windows desktop apps, choose **Manage app → Install**, then use
+**Update**, **Repair** or **Uninstall** in the same manager. Native installations
+use supported Windows registration; older portable copies can be added with
+**Locate existing portable app…**. See the [installer guide](https://github.com/Ascent-Academia/ascent-installer#readme) for the full steps.
+
+
 ## Accuracy
 
 | Step | Source | Check |
