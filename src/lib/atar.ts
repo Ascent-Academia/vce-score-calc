@@ -121,7 +121,7 @@ export function calculateAggregate(entries: SubjectEntry[], year: number, extras
       const fourth = Math.min(...primary.map((c) => c.scaled));
 
       // Increment options.
-      const rest = others.filter((c) => !trio.includes(c));
+      const rest = others.filter((c) => !primary.some((p) => conflicts(c.study, p.study)));
       const options: { c?: Candidate; kind: 'study' | 'vet' | 'he'; value: number }[] = rest.map((c) => ({ c, kind: 'study', value: floor2(c.scaled * 0.1) }));
       if (primary.length === 4) for (let v = 0; v < nonScored; v++) options.push({ kind: 'vet', value: floor2(fourth * 0.1) });
       if (heInc > 0) options.push({ kind: 'he', value: heInc });
