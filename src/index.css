@@ -460,9 +460,11 @@ label.block {
 }
 
 @media (max-width: 640px) {
+  /* Two compact lines per study on phones: the study, then the score with its scaled result beside it. */
   .subject-row {
-    grid-template-columns: minmax(0, 1fr) 36px;
-    grid-template-areas: 'study remove' 'score score' 'scaled scaled' 'badge badge';
+    grid-template-columns: auto minmax(0, 1fr) 36px;
+    grid-template-areas: 'study study remove' 'score scaled scaled' 'score badge badge';
+    row-gap: 2px;
     background: var(--surface-2);
     border-radius: 10px;
     padding: 8px;
@@ -472,19 +474,25 @@ label.block {
   }
   .subject-row > :nth-child(1) {
     grid-area: study;
+    margin-bottom: 6px;
   }
   .subject-row > :nth-child(2) {
     grid-area: score;
   }
   .subject-row > :nth-child(3) {
     grid-area: scaled;
+    justify-self: end;
+    align-self: end;
+    font-size: 0.85rem;
   }
   .subject-row > :nth-child(3)::before {
-    content: 'Scaled: ';
+    content: 'Scaled ';
     color: var(--muted);
   }
   .subject-row > :nth-child(4) {
     grid-area: badge;
+    justify-self: end;
+    align-self: start;
   }
   .subject-row > :nth-child(5) {
     grid-area: remove;
