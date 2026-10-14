@@ -14,6 +14,10 @@ interface Props<T extends string> {
 
 const PAD = 5; // inner padding of the tab bar (matches CSS)
 const DRAG_THRESHOLD = 4;
+const MAX_STRETCH = 36; // px the bar can stretch when the pill is pulled past an end
+
+/** iOS-style rubber band: grows with the overshoot but never exceeds `max`. */
+const rubberBand = (over: number, max: number) => (1 - 1 / ((over * 0.55) / max + 1)) * max;
 
 /**
  * Glass tab bar whose pill can be dragged: press anywhere on the bar and slide,
@@ -25,16 +29,23 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
   const start = useRef<{ x: number; id: number } | null>(null);
   const dragged = useRef(false);
   const [dragX, setDragX] = useState<number | null>(null);
+  // Signed overshoot past the ends while dragging: negative = left, positive = right.
+  const [stretch, setStretch] = useState(0);
+  const [origin, setOrigin] = useState('center');
 
   const index = tabs.findIndex((t) => t.id === value);
+  // Measured in the bar's own (unstretched) space, so the stretch transform doesn't feed back.
   const geometry = () => {
-    const rect = navRef.current!.getBoundingClientRect();
-    const inner = rect.width - PAD * 2;
-    return { rect, inner, w: inner / tabs.length };
+    const nav = navRef.current!;
+    const rect = nav.getBoundingClientRect();
+    const inner = nav.offsetWidth - PAD * 2;
+    return { rect, scale: rect.width / nav.offsetWidth, inner, w: inner / tabs.length };
   };
   const pillX = (clientX: number) => {
-    const { rect, inner, w } = geometry();
-    return Math.max(0, Math.min(inner - w, clientX - rect.left - PAD - w / 2));
+    const { rect, scale, inner, w } = geometry();
+    const raw = (clientX - rect.left) / scale - PAD - w / 2;
+    const x = Math.max(0, Math.min(inner - w, raw));
+    return { x, over: raw - x };
   };
   const nearest = (x: number) => Math.round(x / geometry().w);
 
@@ -51,7 +62,10 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
       // Capture only once it's a real drag, so plain taps still reach the buttons.
       navRef.current!.setPointerCapture(e.pointerId);
     }
-    setDragX(pillX(e.clientX));
+    const { x, over } = pillX(e.clientX);
+    setDragX(x);
+    setStretch(Math.sign(over) * rubberBand(Math.abs(over), MAX_STRETCH));
+    if (over !== 0) setOrigin(over > 0 ? 'left center' : 'right center');
   };
   const endDrag = (e: PointerEvent<HTMLElement>) => {
     if (!start.current || start.current.id !== e.pointerId) return;
@@ -61,6 +75,7 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
       onChange(tabs[i].id);
     }
     setDragX(null);
+    setStretch(0);
   };
 
   const shown = dragX !== null ? Math.max(0, Math.min(tabs.length - 1, nearest(dragX))) : index;
@@ -68,12 +83,20 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
     '--tab-index': index,
     '--tab-count': tabs.length,
     ...(dragX !== null ? { '--drag-x': `${dragX}px` } : {}),
+    // The origin outlives the stretch so the spring-back stays anchored to the same edge.
+    transformOrigin: origin,
+    ...(stretch !== 0 && navRef.current
+      ? {
+          '--stretch-x': 1 + Math.abs(stretch) / navRef.current.offsetWidth,
+          '--stretch-y': 1 - Math.abs(stretch) / 600,
+        }
+      : {}),
   } as CSSProperties;
 
   return (
     <nav
       ref={navRef}
-      className={`tabs glass${dragX !== null ? ' dragging' : ''}`}
+      className={`tabs glass${dragX !== null ? ' dragging' : ''}${stretch !== 0 ? ' stretching' : ''}`}
       role="tablist"
       aria-label="Calculator sections"
       style={style}
