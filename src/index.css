@@ -212,6 +212,22 @@ a {
   cursor: grabbing;
 }
 
+/* Pulling the pill past either end stretches the whole bar like a rubber band,
+   anchored at the opposite edge; on release it springs back. */
+.tabs {
+  transform: scale(var(--stretch-x, 1), var(--stretch-y, 1));
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.5, 1);
+}
+
+.tabs.dragging {
+  transition: transform 0.08s linear;
+}
+
+/* Pressed against an end, the pill stops widening so it stays inside the bar. */
+.tabs.stretching .tab-pill {
+  transform: translateX(var(--drag-x)) scale(1, 0.94);
+}
+
 /* While dragging, the pill follows the pointer with a slight liquid stretch. */
 .tabs.dragging .tab-pill {
   transform: translateX(var(--drag-x)) scale(1.06, 0.94);
@@ -1110,6 +1126,7 @@ td.strong {
   .orb {
     animation: none;
   }
+  .tabs,
   .tab-pill,
   .glass-btn {
     transition: none;
