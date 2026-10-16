@@ -133,6 +133,31 @@ describe('aggregate and ATAR', () => {
     expect(used.includes('EN') && used.includes('EF')).toBe(false);
   });
 
+  it('does not count a duplicate primary study as an increment', () => {
+    const base = [
+      { studyId: 'EN', studyScore: 30 },
+      { studyId: 'CH', studyScore: 40 },
+      { studyId: 'BI', studyScore: 35 },
+      { studyId: 'PH', studyScore: 35 },
+    ];
+    const expected = calculateAggregate(base, 2025);
+    const result = calculateAggregate([...base, { studyId: 'CH', studyScore: 40 }], 2025);
+    expect(result.aggregate).toBe(expected.aggregate);
+    expect(result.rows.filter((r) => r.study?.id === 'CH' && r.role !== 'unused')).toHaveLength(1);
+  });
+
+  it('excludes equivalents of every primary study from increments', () => {
+    const result = calculateAggregate([
+      { studyId: 'EN', studyScore: 30 },
+      { studyId: 'CL', studyScore: 45 },
+      { studyId: 'CK', studyScore: 45 },
+      { studyId: 'BI', studyScore: 35 },
+      { studyId: 'PH', studyScore: 35 },
+    ], 2025);
+    expect(result.rows.filter((r) => ['CL', 'CK'].includes(r.study?.id ?? '') && r.role !== 'unused')).toHaveLength(1);
+    expect(result.aggregate).toBe(153);
+  });
+
   it('requires an English study and four studies', () => {
     expect(calculateAggregate([{ studyId: 'BI', studyScore: 30 }, { studyId: 'CH', studyScore: 30 }, { studyId: 'PY', studyScore: 30 }, { studyId: 'PH', studyScore: 30 }], 2025).eligible).toBe(false);
     expect(calculateAggregate([{ studyId: 'EN', studyScore: 30 }, { studyId: 'CH', studyScore: 30 }, { studyId: 'PY', studyScore: 30 }], 2025).eligible).toBe(false);

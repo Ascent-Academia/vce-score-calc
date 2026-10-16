@@ -9,6 +9,7 @@ import { GlassSelect } from './components/GlassSelect';
 import { TabBar } from './components/TabBar';
 import { LATEST_YEAR, YEARS, getStudy } from './lib/data';
 import type { ExtraIncrements } from './lib/atar';
+import { decodeSharedCalculation, encodeSharedCalculation } from './lib/share';
 
 type Tab = 'atar' | 'study' | 'scaling' | 'method';
 const TABS: { id: Tab; label: string; short: string }[] = [
@@ -38,13 +39,9 @@ const DEFAULT_ROWS: SubjectRow[] = [
 
 function load(): Saved {
   // A shared link (#s=...) takes precedence over what's saved in this browser.
-  const fromHash = new URLSearchParams(location.hash.slice(1)).get('s');
-  if (fromHash) {
-    const rows = fromHash.split(',').map((p) => {
-      const [id, score] = p.split(':');
-      return { uid: newUid(), studyId: getStudy(id) ? id : null, studyScore: score ?? '' };
-    });
-    return { year: LATEST_YEAR, rows, extras: {} };
+  const shared = decodeSharedCalculation(location.hash);
+  if (shared) {
+    return { ...shared, rows: shared.rows.map((r) => ({ ...r, uid: newUid() })) };
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -91,14 +88,14 @@ export default function App() {
   }, [year, rows, extras]);
 
   const share = async () => {
-    const s = rows.filter((r) => r.studyId).map((r) => `${r.studyId}:${r.studyScore}`).join(',');
-    const url = `${location.origin}${location.pathname}#s=${s}`;
+    const hash = encodeSharedCalculation({ year, rows, extras });
+    const url = `${location.origin}${location.pathname}#${hash}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      location.hash = `s=${s}`;
+      location.hash = hash;
     }
   };
 
