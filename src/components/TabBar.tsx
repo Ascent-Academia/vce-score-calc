@@ -14,7 +14,7 @@ interface Props<T extends string> {
 
 const PAD = 5; // inner padding of the tab bar (matches CSS)
 const DRAG_THRESHOLD = 4;
-const MAX_STRETCH = 36; // px the bar can stretch when the pill is pulled past an end
+const MAX_STRETCH = 64; // px the bar can stretch when the pill is pulled past an end
 
 /** iOS-style rubber band: grows with the overshoot but never exceeds `max`. */
 const rubberBand = (over: number, max: number) => (1 - 1 / ((over * 0.55) / max + 1)) * max;
