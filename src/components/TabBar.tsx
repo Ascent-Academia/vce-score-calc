@@ -15,6 +15,7 @@ interface Props<T extends string> {
 const PAD = 5; // inner padding of the tab bar (matches CSS)
 const DRAG_THRESHOLD = 4;
 const MAX_STRETCH = 64; // px the bar can stretch when the pill is pulled past an end
+const MAX_STRETCH_Y = 14; // px the bar can stretch when the pill is pulled up or down
 
 /** iOS-style rubber band: grows with the overshoot but never exceeds `max`. */
 const rubberBand = (over: number, max: number) => (1 - 1 / ((over * 0.55) / max + 1)) * max;
@@ -26,12 +27,16 @@ const rubberBand = (over: number, max: number) => (1 - 1 / ((over * 0.55) / max 
  */
 export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
   const navRef = useRef<HTMLElement>(null);
-  const start = useRef<{ x: number; id: number } | null>(null);
+  const start = useRef<{ x: number; y: number; id: number } | null>(null);
   const dragged = useRef(false);
   const [dragX, setDragX] = useState<number | null>(null);
   // Signed overshoot past the ends while dragging: negative = left, positive = right.
   const [stretch, setStretch] = useState(0);
-  const [origin, setOrigin] = useState('center');
+  // Signed vertical pull while dragging: negative = up, positive = down.
+  const [stretchY, setStretchY] = useState(0);
+  // Origins outlive the stretch so the spring-back stays anchored to the same edges.
+  const [originX, setOriginX] = useState('center');
+  const [originY, setOriginY] = useState('center');
 
   const index = tabs.findIndex((t) => t.id === value);
   // Measured in the bar's own (unstretched) space, so the stretch transform doesn't feed back.
@@ -51,13 +56,13 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
 
   const onPointerDown = (e: PointerEvent<HTMLElement>) => {
     if (e.button !== 0) return;
-    start.current = { x: e.clientX, id: e.pointerId };
+    start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
     dragged.current = false;
   };
   const onPointerMove = (e: PointerEvent<HTMLElement>) => {
     if (!start.current || start.current.id !== e.pointerId) return;
     if (!dragged.current) {
-      if (Math.abs(e.clientX - start.current.x) < DRAG_THRESHOLD) return;
+      if (Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) < DRAG_THRESHOLD) return;
       dragged.current = true;
       // Capture only once it's a real drag, so plain taps still reach the buttons.
       navRef.current!.setPointerCapture(e.pointerId);
@@ -65,7 +70,10 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
     const { x, over } = pillX(e.clientX);
     setDragX(x);
     setStretch(Math.sign(over) * rubberBand(Math.abs(over), MAX_STRETCH));
-    if (over !== 0) setOrigin(over > 0 ? 'left center' : 'right center');
+    if (over !== 0) setOriginX(over > 0 ? 'left' : 'right');
+    const dy = e.clientY - start.current.y;
+    setStretchY(Math.sign(dy) * rubberBand(Math.abs(dy), MAX_STRETCH_Y));
+    if (dy !== 0) setOriginY(dy > 0 ? 'top' : 'bottom');
   };
   const endDrag = (e: PointerEvent<HTMLElement>) => {
     if (!start.current || start.current.id !== e.pointerId) return;
@@ -76,6 +84,7 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
     }
     setDragX(null);
     setStretch(0);
+    setStretchY(0);
   };
 
   const shown = dragX !== null ? Math.max(0, Math.min(tabs.length - 1, nearest(dragX))) : index;
@@ -83,12 +92,12 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
     '--tab-index': index,
     '--tab-count': tabs.length,
     ...(dragX !== null ? { '--drag-x': `${dragX}px` } : {}),
-    // The origin outlives the stretch so the spring-back stays anchored to the same edge.
-    transformOrigin: origin,
-    ...(stretch !== 0 && navRef.current
+    transformOrigin: `${originX} ${originY}`,
+    ...((stretch !== 0 || stretchY !== 0) && navRef.current
       ? {
+          // Pulling sideways also thins the bar slightly; pulling up or down makes it taller.
           '--stretch-x': 1 + Math.abs(stretch) / navRef.current.offsetWidth,
-          '--stretch-y': 1 - Math.abs(stretch) / 600,
+          '--stretch-y': 1 + Math.abs(stretchY) / navRef.current.offsetHeight - Math.abs(stretch) / 600,
         }
       : {}),
   } as CSSProperties;
