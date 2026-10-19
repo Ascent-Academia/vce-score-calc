@@ -84,12 +84,3 @@ and builds on pull requests, pushes to `main` and manual dispatch. It publishes
 under **Settings → Pages → Source: GitHub Actions**.
 
 This is an independent estimate and is not affiliated with VCAA or VTAC.
-
-## Self-hosted build routing
-
-These workflows prefer `ASCENT_RUNNER_LINUX`, then `ASCENT_RUNNER_WINDOWS`,
-each containing a JSON array of self-hosted OS/X64 labels. Legacy
-`ASCENT_RUNNER` maps to Windows only. Without a variable they use hosted Ubuntu.
-Start an eligible Ascent Portable Builder session before dispatching a workflow.
-Node/collection dependencies are installed by the workflow; routing does not
-change collection budgets, job triggers or deploy permissions.
