@@ -1274,9 +1274,12 @@ select option {
 }
 
 /* While dragging, the pill follows the pointer with a slight liquid stretch. */
+/* While dragging, the pill and the menu track the pointer 1:1 (no transition): a short
+   catch-up transition restarts on every pointer move in Safari, so the stretch never settled.
+   The spring transitions above apply again on release. */
 .gselect-menu.following .gselect-pill {
   transform: translateY(var(--pill-y)) scale(0.97, 1.08);
-  transition: transform 0.08s linear;
+  transition: none;
   background: color-mix(in srgb, var(--brand) 24%, transparent);
 }
 
@@ -1298,7 +1301,7 @@ select option {
 }
 
 .gselect-menu.dragging {
-  transition: transform 0.08s linear;
+  transition: none;
 }
 
 /* Pressed against an end, the pill stops stretching and rides the menu's stretching edge. */
