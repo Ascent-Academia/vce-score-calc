@@ -32,7 +32,7 @@ const HOLD_MS = 300;
 const CLOSE_MS = 170;
 /** Most the menu can stretch (px) when the highlight is pulled past the first or last option. */
 const MAX_STRETCH_Y = 64;
-/** Most the menu can stretch (px) when the pointer pulls sideways off it. */
+/** Most the menu can stretch (px) when the pointer pulls sideways, measured from the press. */
 const MAX_STRETCH_X = 40;
 /** How far outside the menu (px) a drag still steers it; beyond this the drag lets go. */
 const ZONE_X = 180;
@@ -185,7 +185,10 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
       setDragY(clamped);
       setActive(nearestRow(clamped + h / 2));
       const sy = Math.sign(over) * rubberBand(Math.abs(over), MAX_STRETCH_Y);
-      const sx = Math.sign(pt.dx) * rubberBand(Math.abs(pt.dx), MAX_STRETCH_X);
+      // Sideways pull counts from where the press started, as in the tab bar, so the menu
+      // responds straight away instead of only once the pointer leaves its edge.
+      const dx = x - press.x;
+      const sx = Math.sign(dx) * rubberBand(Math.abs(dx), MAX_STRETCH_X);
       setStretch({ x: sx, y: sy });
       if (sy !== 0 || sx !== 0) {
         setOrigin((o) => ({ x: sx > 0 ? 'left' : sx < 0 ? 'right' : o.x, y: sy > 0 ? 'top' : sy < 0 ? 'bottom' : o.y }));
