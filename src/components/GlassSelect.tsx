@@ -30,8 +30,13 @@ const DRAG_SLOP = 4;
 const HOLD_MS = 300;
 /** Length of the close animation (ms), matching .gselect-menu.closing in CSS. */
 const CLOSE_MS = 170;
-/** How far (px) the highlight can be pulled past the first or last option. */
-const MAX_OVERSHOOT = 10;
+/** Most the menu can stretch (px) when the highlight is pulled past the first or last option. */
+const MAX_STRETCH_Y = 26;
+/** Most the menu can stretch (px) when the pointer pulls sideways off it. */
+const MAX_STRETCH_X = 14;
+/** How far outside the menu (px) a drag still steers it; beyond this the drag lets go. */
+const ZONE_X = 72;
+const ZONE_Y = 90;
 
 /** iOS-style rubber band, as in the tab bar: grows with the overshoot but never exceeds `max`. */
 const rubberBand = (over: number, max: number) => (1 - 1 / ((over * 0.55) / max + 1)) * max;
@@ -54,6 +59,10 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
   /** Highlight position while it follows the pointer (px from the menu's top), else null. */
   const [dragY, setDragY] = useState<number | null>(null);
   const [rows, setRows] = useState<{ top: number; height: number }[]>([]);
+  // Rubber-band stretch of the whole menu (px, signed), as in the tab bar.
+  const [stretch, setStretch] = useState({ x: 0, y: 0 });
+  // Origins outlive the stretch so the spring-back stays anchored to the same edges.
+  const [origin, setOrigin] = useState({ x: 'right', y: 'top' });
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
@@ -62,8 +71,8 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
   const isOpen = open && !closing;
 
   // Latest values for the document-level gesture listeners, which outlive a render.
-  const latest = useRef({ options, onChange, rows });
-  latest.current = { options, onChange, rows };
+  const latest = useRef({ options, onChange, rows, following: false });
+  latest.current = { options, onChange, rows, following: dragY !== null };
   const cleanup = useRef<(() => void) | null>(null);
   const closeTimer = useRef<number | undefined>(undefined);
   useEffect(
@@ -88,6 +97,7 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
       setOpen(false);
       setClosing(false);
       setDragY(null);
+      setStretch({ x: 0, y: 0 });
     }, CLOSE_MS);
   };
 
@@ -104,6 +114,7 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     window.clearTimeout(closeTimer.current);
     setClosing(false);
     setDragY(null);
+    setStretch({ x: 0, y: 0 });
     setActive(Math.max(0, options.findIndex((o) => o.value === value)));
     setOpen(true);
   };
@@ -111,6 +122,7 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     const { options: opts, onChange: change } = latest.current;
     setActive(i);
     setDragY(null); // the pill springs onto the chosen option as the menu fades
+    setStretch({ x: 0, y: 0 });
     change(opts[i].value);
     buttonRef.current?.focus({ preventScroll: true });
     closeMenu();
@@ -125,11 +137,23 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     }
     return best;
   };
-  /** Pointer y relative to the menu's top, or null when the pointer is outside the menu. */
-  const inMenu = (x: number, y: number) => {
-    const m = menuRef.current?.getBoundingClientRect();
-    if (!m || x < m.left || x > m.right || y < m.top - 4 || y > m.bottom + 4) return null;
-    return y - m.top;
+  /**
+   * Where the pointer is relative to the menu, measured in the menu's own unstretched
+   * layout so the stretch transform doesn't feed back. Null when it's outside the zone
+   * around the menu that still steers it.
+   */
+  const menuPoint = (x: number, y: number) => {
+    const ul = menuRef.current;
+    const box = ref.current?.getBoundingClientRect();
+    if (!ul || !box) return null;
+    const left = box.left + ul.offsetLeft;
+    const top = box.top + ul.offsetTop;
+    const w = ul.offsetWidth;
+    const h = ul.offsetHeight;
+    const dx = x < left ? x - left : x > left + w ? x - (left + w) : 0;
+    const rel = y - top;
+    if (Math.abs(dx) > ZONE_X || rel < -ZONE_Y || rel > h + ZONE_Y) return null;
+    return { rel, dx, w, h };
   };
   const overButton = (x: number, y: number) => !!buttonRef.current?.contains(document.elementFromPoint(x, y));
 
@@ -143,22 +167,29 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     const pointerId = e.pointerId;
     setDragging(true);
 
-    // The pill tracks the pointer continuously (not row by row), with a rubber band past the ends.
+    // The pill tracks the pointer continuously (not row by row). Pulled past the first or last
+    // option, or off to the side, the whole menu stretches like a rubber band, anchored at the
+    // opposite edge, and springs back on release.
     const follow = (x: number, y: number) => {
       const r = latest.current.rows;
-      const rel = inMenu(x, y);
-      if (rel === null || r.length === 0) {
+      const pt = menuPoint(x, y);
+      if (pt === null || r.length === 0) {
         setDragY(null);
+        setStretch({ x: 0, y: 0 });
         return;
       }
       const h = r[0].height;
-      const min = r[0].top;
-      const max = r[r.length - 1].top;
-      const raw = rel - h / 2;
-      const clamped = Math.max(min, Math.min(max, raw));
+      const raw = pt.rel - h / 2;
+      const clamped = Math.max(r[0].top, Math.min(r[r.length - 1].top, raw));
       const over = raw - clamped;
-      setDragY(clamped + Math.sign(over) * rubberBand(Math.abs(over), MAX_OVERSHOOT));
-      setActive(nearestRow(rel));
+      setDragY(clamped);
+      setActive(nearestRow(clamped + h / 2));
+      const sy = Math.sign(over) * rubberBand(Math.abs(over), MAX_STRETCH_Y);
+      const sx = Math.sign(pt.dx) * rubberBand(Math.abs(pt.dx), MAX_STRETCH_X);
+      setStretch({ x: sx, y: sy });
+      if (sy !== 0 || sx !== 0) {
+        setOrigin((o) => ({ x: sx > 0 ? 'left' : sx < 0 ? 'right' : o.x, y: sy > 0 ? 'top' : sy < 0 ? 'bottom' : o.y }));
+      }
     };
 
     const move = (ev: PointerEvent) => {
@@ -170,11 +201,14 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     const up = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return;
       end();
-      const rel = inMenu(ev.clientX, ev.clientY);
+      const pt = menuPoint(ev.clientX, ev.clientY);
       const held = press.moved || performance.now() - press.t > HOLD_MS;
-      if (rel !== null) {
+      const wasFollowing = latest.current.following;
+      setStretch({ x: 0, y: 0 });
+      // Released on the menu, or while steering it from just outside: pick the highlighted year.
+      if (pt !== null && (wasFollowing || (pt.dx === 0 && pt.rel >= 0 && pt.rel <= pt.h))) {
         // From the button, a quick click that happens to end on the menu shouldn't pick anything.
-        if (press.from === 'menu' || held) choose(nearestRow(rel));
+        if (press.from === 'menu' || held) choose(nearestRow(Math.max(0, Math.min(pt.h, pt.rel))));
         else setDragY(null);
         return;
       }
@@ -196,6 +230,7 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     const cancel = () => {
       end();
       setDragY(null);
+      setStretch({ x: 0, y: 0 });
     };
     document.addEventListener('pointermove', move, { passive: false });
     document.addEventListener('pointerup', up);
@@ -204,9 +239,20 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
   };
 
   const row = rows[active];
-  const pillStyle = {
+  const menuW = menuRef.current?.offsetWidth || 190;
+  const menuH = menuRef.current?.offsetHeight || 200;
+  const stretching = stretch.x !== 0 || stretch.y !== 0;
+  const menuStyle = {
     '--pill-y': `${dragY ?? row?.top ?? 0}px`,
     '--pill-h': `${row?.height ?? 0}px`,
+    transformOrigin: `${origin.x} ${origin.y}`,
+    ...(stretching
+      ? {
+          // Pulling up or down makes the menu taller and slightly thinner; sideways makes it wider.
+          '--stretch-x': 1 + Math.abs(stretch.x) / menuW - Math.abs(stretch.y) / 500,
+          '--stretch-y': 1 + Math.abs(stretch.y) / menuH,
+        }
+      : {}),
   } as CSSProperties;
 
   return (
@@ -260,11 +306,11 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
       {open && (
         <ul
           ref={menuRef}
-          className={`gselect-menu glass${dragging ? ' dragging' : ''}${dragY !== null ? ' following' : ''}${closing ? ' closing' : ''}`}
+          className={`gselect-menu glass${dragging ? ' dragging' : ''}${dragY !== null ? ' following' : ''}${stretching ? ' stretching' : ''}${closing ? ' closing' : ''}`}
           role="listbox"
           id={listId}
           aria-label={label}
-          style={pillStyle}
+          style={menuStyle}
         >
           {rows.length > 0 && <span className="gselect-pill" aria-hidden="true" />}
           {options.map((o, i) => (

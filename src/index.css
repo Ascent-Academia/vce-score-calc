@@ -140,12 +140,6 @@ a {
   letter-spacing: -0.01em;
 }
 
-.brand-title p {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
 .top-controls {
   display: flex;
   gap: 10px;
@@ -308,11 +302,6 @@ a {
 .card-head p {
   margin: 4px 0 0;
   font-size: 0.9rem;
-}
-
-.result {
-  position: sticky;
-  top: 12px;
 }
 
 .eyebrow {
@@ -712,6 +701,7 @@ fieldset.ga legend {
   position: relative;
   margin-top: 10px;
   padding: 4px 0;
+  --thumb-w: 16px;
   cursor: pointer;
   touch-action: none;
   -webkit-user-select: none;
@@ -782,9 +772,9 @@ fieldset.ga legend {
   position: absolute;
   z-index: 3;
   top: 50%;
-  width: 16px;
+  width: var(--thumb-w);
   height: 28px;
-  margin: -14px 0 0 -8px;
+  margin-top: -14px;
   border-radius: 8px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 85%, white), var(--brand-strong));
   border: 2px solid var(--surface);
@@ -965,9 +955,6 @@ td.strong {
   }
   .app {
     padding-bottom: 80px;
-  }
-  .result {
-    position: static;
   }
 }
 
@@ -1303,6 +1290,22 @@ select option {
   color: var(--text);
 }
 
+/* Pulling the highlight past either end, or sideways, stretches the whole menu like the tab
+   bar, anchored at the opposite edge; on release it springs back. */
+.gselect-menu {
+  transform: scale(var(--stretch-x, 1), var(--stretch-y, 1));
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.5, 1);
+}
+
+.gselect-menu.dragging {
+  transition: transform 0.08s linear;
+}
+
+/* Pressed against an end, the pill stops stretching and rides the menu's stretching edge. */
+.gselect-menu.stretching .gselect-pill {
+  transform: translateY(var(--pill-y)) scale(0.98, 1);
+}
+
 .gselect-menu.closing {
   animation: gselect-out 0.17s ease-in forwards;
   pointer-events: none;
@@ -1536,7 +1539,7 @@ details.rank-fallback label {
 }
 
 .ga-rows .ga-val {
-  min-width: 52px;
+  flex: 0 0 76px;
   text-align: right;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
