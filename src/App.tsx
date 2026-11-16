@@ -133,11 +133,9 @@ export default function App() {
             onChange={setYear}
             options={YEARS.map((y) => ({ value: y, label: String(y), hint: y === LATEST_YEAR ? 'Latest' : undefined }))}
           />
-          {tab === 'atar' && (
-            <button type="button" className="glass-btn" onClick={share}>
-              {copied ? 'Link copied' : 'Share'}
-            </button>
-          )}
+          <button type="button" className="glass-btn" onClick={share} title="Copy a link to your ATAR subjects and study scores">
+            {copied ? 'Link copied' : 'Share'}
+          </button>
         </div>
       </header>
 

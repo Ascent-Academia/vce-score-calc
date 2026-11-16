@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getStudy, STUDIES, LATEST_YEAR, YEARS } from './data';
 import { scaledScore } from './scaling';
 import { aggregateToAtar, calculateAggregate, atarToAggregate } from './atar';
-import { estimateStudyScore, gradeFor, gaCdf, gaQuantile, requiredScore } from './studyScore';
+import { estimateStudyScore, gradeFor, gaCdf, gaQuantile, requiredFraction, requiredScore, studyScoreGain } from './studyScore';
 import { normCdf, normInv } from './stats';
 
 const study = (id: string) => {
@@ -195,5 +195,38 @@ describe('study score', () => {
     s[2] = need;
     expect(estimateStudyScore(methods, s).studyScore).toBeCloseTo(35, 1);
     expect(requiredScore(methods, scores, 2, 45)).toBeNull();
+  });
+});
+
+describe('targets and leverage', () => {
+  const mm = getStudy('NJ')!;
+  const gas = mm.assessment!.gas;
+  const scores = gas.map((ga) => 0.7 * ga.max);
+
+  it('requiredFraction on one GA matches requiredScore', () => {
+    const p = requiredFraction(mm, scores, [2], 38)!;
+    expect(p * gas[2].max).toBeCloseTo(requiredScore(mm, scores, 2, 38)!, 6);
+  });
+
+  it('needs less on each exam when both exams improve together', () => {
+    const both = requiredFraction(mm, scores, [1, 2], 38)!;
+    const exam2 = requiredFraction(mm, scores, [2], 38);
+    expect(both).toBeGreaterThan(0.7);
+    expect(exam2 === null || both < exam2).toBe(true);
+    const s = scores.slice();
+    s[1] = both * gas[1].max;
+    s[2] = both * gas[2].max;
+    expect(estimateStudyScore(mm, s).studyScore).toBeGreaterThanOrEqual(38 - 1e-6);
+  });
+
+  it('returns null when out of reach and 0 when already reached', () => {
+    expect(requiredFraction(mm, gas.map(() => 0), [1], 45)).toBeNull();
+    expect(requiredFraction(mm, gas.map((ga) => ga.max), [1], 20)).toBe(0);
+  });
+
+  it('gives positive leverage, largest for the heaviest-weighted GA', () => {
+    const gains = gas.map((_, i) => studyScoreGain(mm, scores, i));
+    expect(gains.every((g) => g > 0)).toBe(true);
+    expect(gains[1]).toBeLessThan(gains[2]);
   });
 });
