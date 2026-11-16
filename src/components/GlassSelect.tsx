@@ -34,11 +34,8 @@ const CLOSE_MS = 170;
 const MAX_STRETCH_Y = 64;
 /** Most the menu can stretch (px) when the pointer pulls sideways, measured from the press. */
 const MAX_STRETCH_X = 40;
-/** How far outside the menu (px) a drag still steers it; beyond this the drag lets go. */
-const ZONE_X = 180;
 /** Releasing more than this far (px) beside the menu cancels instead of picking. */
 const RELEASE_SLOP_X = 8;
-const ZONE_Y = 200;
 
 /** iOS-style rubber band, as in the tab bar: grows with the overshoot but never exceeds `max`. */
 const rubberBand = (over: number, max: number) => (1 - 1 / ((over * 0.55) / max + 1)) * max;
@@ -73,8 +70,8 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
   const isOpen = open && !closing;
 
   // Latest values for the document-level gesture listeners, which outlive a render.
-  const latest = useRef({ options, onChange, rows, following: false });
-  latest.current = { options, onChange, rows, following: dragY !== null };
+  const latest = useRef({ options, onChange, rows, value, following: false });
+  latest.current = { options, onChange, rows, value, following: dragY !== null };
   const cleanup = useRef<(() => void) | null>(null);
   const closeTimer = useRef<number | undefined>(undefined);
   useEffect(
@@ -141,8 +138,8 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
   };
   /**
    * Where the pointer is relative to the menu, measured in the menu's own unstretched
-   * layout so the stretch transform doesn't feed back. Null when it's outside the zone
-   * around the menu that still steers it.
+   * layout so the stretch transform doesn't feed back. There is no distance limit: a drag
+   * keeps steering the menu, however far it goes, until the press is released.
    */
   const menuPoint = (x: number, y: number) => {
     const ul = menuRef.current;
@@ -154,16 +151,20 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     const h = ul.offsetHeight;
     const dx = x < left ? x - left : x > left + w ? x - (left + w) : 0;
     const rel = y - top;
-    if (Math.abs(dx) > ZONE_X || rel < -ZONE_Y || rel > h + ZONE_Y) return null;
     return { rel, dx, w, h };
   };
   const overButton = (x: number, y: number) => !!buttonRef.current?.contains(document.elementFromPoint(x, y));
 
   /** Tracks one press until release. Listeners attach synchronously so a quick flick isn't missed. */
   const startPress = (e: ReactPointerEvent, from: Press['from'], wasOpen: boolean) => {
-    // Touch and pen capture the pointer to the pressed element; release it so moves hit-test the menu.
+    // Capture the pointer so the drag keeps receiving moves and the release even after it
+    // leaves the menu, or the embed's frame. Hit-testing below uses coordinates, not targets.
     const target = e.currentTarget as Element;
-    if (target.hasPointerCapture?.(e.pointerId)) target.releasePointerCapture(e.pointerId);
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      // the pointer may already be gone (e.g. a very quick tap)
+    }
     cleanup.current?.();
     const press: Press = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, from, wasOpen };
     const pointerId = e.pointerId;
@@ -210,18 +211,23 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
       const held = press.moved || performance.now() - press.t > HOLD_MS;
       const wasFollowing = latest.current.following;
       setStretch({ x: 0, y: 0 });
+      // Coming back to the button only cancels a drag that started there; a drag from inside the
+      // menu pulled up over the button still picks the first year.
+      const onButton = press.from === 'button' && overButton(ev.clientX, ev.clientY);
       // Pick the highlighted year only when released over the menu's width. Above or below it
       // still counts (that's how you reach the first or last year), but letting go beside the
-      // menu after a sideways pull cancels, so stretching it never changes the year by surprise.
-      const besideMenu = pt !== null && Math.abs(pt.dx) > RELEASE_SLOP_X;
-      if (pt !== null && !besideMenu && (wasFollowing || (pt.rel >= 0 && pt.rel <= pt.h))) {
+      // menu after a sideways pull, or back on the button, picks nothing.
+      const besideMenu = pt === null || Math.abs(pt.dx) > RELEASE_SLOP_X;
+      if (pt !== null && !onButton && !besideMenu && (wasFollowing || (pt.rel >= 0 && pt.rel <= pt.h))) {
         // From the button, a quick click that happens to end on the menu shouldn't pick anything.
         if (press.from === 'menu' || held) choose(nearestRow(Math.max(0, Math.min(pt.h, pt.rel))));
         else setDragY(null);
         return;
       }
       setDragY(null);
-      if (overButton(ev.clientX, ev.clientY)) {
+      // Nothing picked: the highlight returns to the selected year.
+      setActive(Math.max(0, latest.current.options.findIndex((o) => o.value === latest.current.value)));
+      if (onButton) {
         // A plain click on the button toggles; a drag that comes back to it leaves the menu as it was.
         if (press.from === 'button' && press.wasOpen && !press.moved) closeMenu();
       } else if (press.moved) {

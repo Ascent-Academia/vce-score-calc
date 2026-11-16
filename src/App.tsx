@@ -94,12 +94,11 @@ export default function App() {
   const share = async () => {
     const s = rows.filter((r) => r.studyId).map((r) => `${r.studyId}:${r.studyScore}`).join(',');
     const url = `${location.origin}${location.pathname}#s=${s}`;
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       setCopied(true);
       window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(() => setCopied(false), 2000);
-    } catch {
+    } else {
       location.hash = `s=${s}`;
     }
   };
@@ -195,4 +194,38 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+/**
+ * Copies text to the clipboard. The async Clipboard API is blocked inside an embed (iframe)
+ * unless the host page grants clipboard-write, so fall back to the older copy command, which
+ * frames allow during a click.
+ */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // fall through to the legacy copy command
+  }
+  const focused = document.activeElement as HTMLElement | null;
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.top = '0';
+  ta.style.left = '0';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  ta.remove();
+  focused?.focus({ preventScroll: true });
+  return ok;
 }
