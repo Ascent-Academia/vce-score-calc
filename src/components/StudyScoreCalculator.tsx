@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { META, STUDIES, getStudy, scalingYearFor, type GradedAssessment, type Study } from '../lib/data';
 import { DEFAULT_RHO, estimateStudyScore, gaCdf, gaQuantile, gradeFor, requiredFraction, studyScoreGain } from '../lib/studyScore';
 import { scaledScore } from '../lib/scaling';
@@ -246,6 +246,14 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
     return out;
   }, [study, complete, scoresKey, t, targetValid, rho]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Sets every input of a GA (one, or oral + written) to the same percentage. */
+  const setGaPercent = (start: number, count: number, p: number) => {
+    if (!study) return;
+    const next = values.slice();
+    for (let k = 0; k < count; k++) next[start + k] = String(p);
+    setInputs({ ...inputs, [study.id]: next });
+  };
+
   const setValue = (i: number, v: string) => {
     if (!study) return;
     const next = values.slice();
@@ -388,7 +396,12 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                     )}
                   </div>
                 </div>
-                <GradeBar ga={ga} score={score} />
+                <GradeBar
+                  ga={ga}
+                  score={score}
+                  entered={raw !== null ? (raw / ga.max) * 100 : null}
+                  onChange={(p) => setGaPercent(start, gaInputs(ga).length, p)}
+                />
               </fieldset>
             ))}
           </div>
@@ -519,19 +532,82 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
   );
 }
 
-function GradeBar({ ga, score }: { ga: GradedAssessment; score: number | null }) {
+interface GradeBarProps {
+  ga: GradedAssessment;
+  /** Score used in the estimate (moderated when adjusting for the school). */
+  score: number | null;
+  /** The percentage as entered, which dragging sets. */
+  entered: number | null;
+  onChange: (pct: number) => void;
+}
+
+/** Grade bands for a GA, doubling as a slider: drag, click or use the arrow keys to set your %. */
+function GradeBar({ ga, score, entered, onChange }: GradeBarProps) {
   const total = ga.grades.reduce((s, g) => s + g.n, 0) || 1;
   const bands = ga.grades.filter((g) => g.lo !== null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const value = entered === null ? null : Math.max(0, Math.min(100, entered));
+  const shown = value ?? 0;
+
+  const pctAt = (clientX: number) => {
+    const r = trackRef.current!.getBoundingClientRect();
+    return Math.round(Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * 100);
+  };
+  const set = (p: number) => {
+    const v = Math.max(0, Math.min(100, Math.round(p)));
+    if (v !== value) onChange(v);
+  };
+  const moderatedPct = score !== null ? (score / ga.max) * 100 : null;
+  const showModerated = moderatedPct !== null && value !== null && Math.abs(moderatedPct - value) >= 0.5;
+  const gradeNow = gradeFor(ga, (shown / 100) * ga.max);
+
   return (
-    <div className="gradebar" aria-hidden="true">
-      <div className="gradebar-track">
+    <div
+      className={`gradebar${dragging ? ' dragging' : ''}`}
+      role="slider"
+      tabIndex={0}
+      aria-label={`${ga.label} percentage`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={value ?? undefined}
+      aria-valuetext={value === null ? 'Not entered' : `${value.toFixed(0)}%, grade ${gradeNow}`}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.currentTarget.focus({ preventScroll: true });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDragging(true);
+        set(pctAt(e.clientX));
+      }}
+      onPointerMove={(e) => {
+        if (dragging) set(pctAt(e.clientX));
+      }}
+      onPointerUp={() => setDragging(false)}
+      onPointerCancel={() => setDragging(false)}
+      onKeyDown={(e) => {
+        const step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 5, PageDown: -5 }[e.key];
+        if (step !== undefined) set(shown + step);
+        else if (e.key === 'Home') set(0);
+        else if (e.key === 'End') set(100);
+        else return;
+        e.preventDefault();
+      }}
+    >
+      <div className="gradebar-track" ref={trackRef}>
         {bands.map((g) => (
           <div key={g.grade} className="gradebar-seg" style={{ width: `${((g.hi! - g.lo! + 1) / (ga.max + 1)) * 100}%` }} title={`${g.grade}: ${g.lo}–${g.hi} (${((g.n / total) * 100).toFixed(1)}% of students)`}>
             <span>{g.grade}</span>
           </div>
         ))}
-        {score !== null && <div className="gradebar-mark" style={{ left: `${(score / ga.max) * 100}%` }} />}
+        <div className="gradebar-fill" style={{ width: `${shown}%` }} />
+        {showModerated && <div className="gradebar-mark moderated" style={{ left: `${moderatedPct}%` }} title="After moderation" />}
       </div>
+      {value !== null && (
+        <div className="gradebar-thumb" style={{ left: `${shown}%` }}>
+          {dragging && <span className="gradebar-tip">{shown.toFixed(0)}% · {gradeNow}</span>}
+        </div>
+      )}
     </div>
   );
 }

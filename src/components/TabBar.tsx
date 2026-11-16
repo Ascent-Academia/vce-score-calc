@@ -119,6 +119,7 @@ export function TabBar<T extends string>({ tabs, value, onChange }: Props<T>) {
         <button
           key={t.id}
           role="tab"
+          aria-label={t.label}
           aria-selected={value === t.id}
           className={i === shown ? 'active' : ''}
           onClick={() => {
