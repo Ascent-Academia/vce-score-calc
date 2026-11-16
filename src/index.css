@@ -745,22 +745,6 @@ fieldset.ga legend {
   border-radius: 2px;
 }
 
-.target {
-  margin-top: 16px;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-}
-
-.target label {
-  display: block;
-  font-weight: 500;
-}
-
-.target input {
-  width: 64px;
-  margin: 0 4px;
-}
-
 /* Scaling table */
 .toolbar {
   display: flex;
@@ -1356,4 +1340,123 @@ details.rank-fallback label {
 .hint.pending-note {
   background: var(--warn-soft);
   margin-top: 12px;
+}
+
+/* Study score results card: leverage and target rows. */
+.result-section {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.result-section h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.result-section > .muted.small {
+  margin: 4px 0 0;
+}
+
+.target-label {
+  flex-direction: row;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.target-label input {
+  width: 64px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.ga-rows {
+  list-style: none;
+  margin: 10px 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.ga-rows li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--glass-rim);
+  font-size: 0.9rem;
+}
+
+.ga-rows li.best,
+.ga-rows li.combo {
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+}
+
+.ga-rows .ga-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 550;
+}
+
+.ga-rows .grade {
+  min-width: 32px;
+  height: 24px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+}
+
+.ga-rows .ga-val {
+  min-width: 52px;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ga-rows .ga-val small {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ga-rows .ga-val.out {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ga-rows .ga-val.ok {
+  color: var(--good);
+}
+
+.stats dd.up {
+  color: var(--good);
+}
+
+.stats dd.down {
+  color: var(--warn);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ga-rows li {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .ga-rows li.best,
+  .ga-rows li.combo {
+    background: color-mix(in srgb, var(--brand) 24%, transparent);
+    border-color: color-mix(in srgb, var(--brand) 40%, transparent);
+  }
+}
+
+.gselect-button {
+  touch-action: none;
+}
+
+.gselect-menu.dragging li {
+  cursor: default;
 }

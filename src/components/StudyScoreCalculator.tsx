@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { META, STUDIES, getStudy, scalingYearFor, type GradedAssessment, type Study } from '../lib/data';
-import { DEFAULT_RHO, estimateStudyScore, gaCdf, gaQuantile, gradeFor, requiredScore } from '../lib/studyScore';
+import { DEFAULT_RHO, estimateStudyScore, gaCdf, gaQuantile, gradeFor, requiredFraction, studyScoreGain } from '../lib/studyScore';
 import { scaledScore } from '../lib/scaling';
 import { StudyPicker } from './StudyPicker';
 import { SchoolPicker } from './SchoolPicker';
@@ -83,6 +83,40 @@ function rawVsModerated(raw: number, moderated: number, max: number): string {
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Assessed outside the school (exams, externally-assessed tasks), not SACs or SATs. */
+function isExternal(ga: GradedAssessment): boolean {
+  return !isModerated(ga) && !/SCHOOL-ASSESSED/i.test(ga.title);
+}
+
+/** Compact assessment name for the results card, e.g. "Exam 2", "Unit 3 SACs", "SAT". */
+function shortLabel(ga: GradedAssessment, all: GradedAssessment[]): string {
+  if (ga.components) return 'Examination';
+  const l = ga.label;
+  let m = /^Units? (\d)(?: and (\d))? school-assessed coursework/i.exec(l);
+  if (m) return all.filter(isModerated).length > 1 ? `Unit ${m[1]} SACs` : 'SACs';
+  if (/school-assessed task/i.test(l)) return 'School-assessed task';
+  m = /^Written examination (\d)$/i.exec(l);
+  if (m) return `Exam ${m[1]}`;
+  // A lone written exam is just "Exam" unless another exam (performance, oral…) sits beside it.
+  if (/^Written examination$/i.test(l)) return all.filter((g) => isExternal(g)).length > 1 ? 'Written exam' : 'Exam';
+  return cap(l.replace(/examination/i, 'exam'));
+}
+
+/** "+1.4", "−0.3", "0.0" */
+const signed = (x: number, dp: number) => {
+  const r = Number(x.toFixed(dp));
+  return r > 0 ? `+${r.toFixed(dp)}` : r < 0 ? `−${Math.abs(r).toFixed(dp)}` : (0).toFixed(dp);
+};
+
+/** Where a percentile sits, phrased for students. */
+function standing(p: number): string {
+  if (p >= 0.5) return `top ${pct(1 - p)} of the state`;
+  return `above ${pct(p)} of students`;
+}
+
+/** Required share of full marks, rounded up so it's never optimistic. */
+const pctNeed = (p: number) => `${Math.min(100, Math.ceil(p * 100 - 1e-6))}%`;
 const pct = (x: number) => `${(x * 100).toFixed(x > 0.995 || x < 0.005 ? 1 : 0)}%`;
 
 export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabel }: Props) {
@@ -177,14 +211,40 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
   const sy = study ? scalingYearFor(study, year) : null;
   const scaled = estimate && sy ? scaledScore(study!, estimate.rounded, sy) : null;
 
-  const lastIdx = perGa.length - 1;
   // Until the user picks a target, suggest five above the current estimate.
   const target = targetInput ?? (estimate ? String(Math.min(50, estimate.rounded + 5)) : '40');
   const t = Number(target);
-  const need = useMemo(() => {
-    if (!study || !complete || !(t > 0 && t <= 50)) return undefined;
-    return requiredScore(study, scores, lastIdx, t, rho);
-  }, [study, complete, JSON.stringify(scores), lastIdx, t, rho]); // eslint-disable-line react-hooks/exhaustive-deps
+  const targetValid = t >= 1 && t <= 50;
+  const scoresKey = JSON.stringify(scores);
+
+  // How much 5 more percentage points on each GA would lift the study score.
+  const leverage = useMemo(() => {
+    if (!study || !complete) return [];
+    return perGa.map((_, i) => studyScoreGain(study, scores, i, 5, rho));
+  }, [study, complete, scoresKey, rho]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // What each GA (or every external assessment together) needs for the target.
+  const routes = useMemo(() => {
+    if (!study || !complete || !targetValid) return [];
+    const gas = study.assessment!.gas;
+    const out: { key: string; label: string; indices: number[]; p: number | null }[] = gas.map((ga, i) => ({
+      key: String(ga.ga),
+      label: shortLabel(ga, gas),
+      indices: [i],
+      p: requiredFraction(study, scores, [i], t, rho),
+    }));
+    const external = gas.map((ga, i) => (isExternal(ga) ? i : -1)).filter((i) => i >= 0);
+    if (external.length >= 2) {
+      const allExams = external.every((i) => /EXAM|TEST/i.test(gas[i].title));
+      out.push({
+        key: 'external',
+        label: allExams ? (external.length === 2 ? 'Both exams, same %' : `All ${external.length} exams, same %`) : 'All external assessments, same %',
+        indices: external,
+        p: requiredFraction(study, scores, external, t, rho),
+      });
+    }
+    return out;
+  }, [study, complete, scoresKey, t, targetValid, rho]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setValue = (i: number, v: string) => {
     if (!study) return;
@@ -350,10 +410,10 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
       <aside className="card result glass" aria-live="polite">
         <p className="eyebrow">Estimated study score{study ? ` · ${study.name}` : ''}</p>
         <p className="atar">{estimate ? estimate.rounded : '—'}</p>
-        {estimate && (
+        {estimate && study && (
           <>
             <p className="muted">
-              Likely range {Math.floor(estimate.low)}–{Math.ceil(estimate.high)} · top {pct(1 - estimate.percentile)} of the state
+              Likely range {Math.floor(estimate.low)}–{Math.ceil(estimate.high)} · {standing(estimate.percentile)}
             </p>
             <dl className="stats">
               <div>
@@ -364,23 +424,81 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
                 <dt>Scaled ({sy ?? '–'})</dt>
                 <dd>{scaled != null ? scaled.toFixed(2) : '–'}</dd>
               </div>
+              <div>
+                <dt>Scaling</dt>
+                <dd className={scaled == null ? '' : scaled - estimate.rounded >= 0.005 ? 'up' : scaled - estimate.rounded <= -0.005 ? 'down' : ''}>
+                  {scaled != null ? signed(scaled - estimate.rounded, 2) : '–'}
+                </dd>
+              </div>
             </dl>
-            <button type="button" className="glass-btn prominent block" onClick={() => onUse(study!.id, estimate.rounded)}>
+            <button type="button" className="glass-btn prominent block" onClick={() => onUse(study.id, estimate.rounded)}>
               {useLabel}
             </button>
-            <div className="target">
-              <label>
-                What do I need on <strong>{perGa[lastIdx].ga.components ? 'the examination' : perGa[lastIdx].ga.label.toLowerCase()}</strong> for a study score of
-                <input type="number" min={1} max={50} value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Target study score" />?
-              </label>
-              <p className="hint">
-                {need === undefined
-                  ? 'Enter a target between 1 and 50.'
-                  : need === null
-                    ? `Not reachable with your other results: full marks gives about ${Math.floor(estimateStudyScore(study!, scores.map((v, i) => (i === lastIdx ? perGa[i].ga.max : v)), rho).studyScore)}.`
-                    : `About ${((need / perGa[lastIdx].ga.max) * 100).toFixed(0)}% (${need.toFixed(0)}/${perGa[lastIdx].ga.max}, grade ${gradeFor(perGa[lastIdx].ga, need)}), keeping your other GA results as entered.`}
-              </p>
-            </div>
+
+            <section className="result-section">
+              <h3>What moves your score</h3>
+              <p className="muted small">Study score change from 5 more percentage points on each assessment, the others unchanged.</p>
+              <ul className="ga-rows">
+                {perGa.map((g, i) => {
+                  const gain = leverage[i] ?? 0;
+                  const best = leverage.length > 1 && gain > 0.05 && gain === Math.max(...leverage);
+                  return (
+                    <li key={g.ga.ga} className={best ? 'best' : ''}>
+                      <span className="ga-name">
+                        {shortLabel(g.ga, study.assessment!.gas)} <span className="weight">{g.ga.weight}%</span>
+                      </span>
+                      <span className={`grade g-${gradeFor(g.ga, g.score ?? 0).replace('+', 'p')}`}>{gradeFor(g.ga, g.score ?? 0)}</span>
+                      <span className="ga-val">{g.score !== null && g.score >= g.ga.max - 1e-9 ? 'Full marks' : `${signed(gain, 1)}`}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            <section className="result-section">
+              <div className="target-label">
+                <h3 id="target-heading">To reach a study score of</h3>
+                <input type="number" min={1} max={50} value={target} onChange={(e) => setTarget(e.target.value)} aria-labelledby="target-heading" />
+              </div>
+              {!targetValid ? (
+                <p className="hint">Enter a target between 1 and 50.</p>
+              ) : (
+                <>
+                  <ul className="ga-rows">
+                    {routes.map((r) => {
+                      const ga = study.assessment!.gas[r.indices[0]];
+                      const single = r.indices.length === 1;
+                      const moderatedRow = single && moderating && isModerated(ga);
+                      return (
+                        <li key={r.key} className={r.indices.length > 1 ? 'combo' : ''}>
+                          <span className="ga-name">{r.label}</span>
+                          {r.p === null ? (
+                            <span className="ga-val out">Out of reach</span>
+                          ) : r.p === 0 ? (
+                            <span className="ga-val ok">Any score</span>
+                          ) : (
+                            <>
+                              {single && <span className={`grade g-${gradeFor(ga, r.p * ga.max).replace('+', 'p')}`}>{gradeFor(ga, r.p * ga.max)}</span>}
+                              <span className="ga-val">
+                                {pctNeed(r.p)}
+                                {moderatedRow && <small> moderated</small>}
+                              </span>
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="muted small">
+                    {routes.length > perGa.length
+                      ? 'Each row changes only that assessment (the last row raises them together), keeping your other results as entered.'
+                      : 'Each row changes only that assessment, keeping your other results as entered.'}
+                    {routes.some((r) => r.p === null) &&
+                      ` "Out of reach" means full marks there isn't enough on its own.`}
+                  </p>
+                </>
+              )}
+            </section>
           </>
         )}
         {estimate && pendingCount > 0 && (
@@ -390,9 +508,11 @@ export function StudyScoreCalculator({ year, studyId, setStudyId, onUse, useLabe
           </p>
         )}
         <p className="fineprint">
-          {moderating
-            ? "Moderated SACs are estimated from your position in your class and your school's published VCAA results. Your class's actual exam results, which VCAA uses, aren't known in advance, so treat them as a range."
-            : "VCAA rescales each school's SAC scores to match how that school's students do on the exam, so your raw school percentage can move up or down. Use \"Adjust for my school\" to estimate it."}
+          {!hasSacs
+            ? `Estimated from VCAA's ${META.gaYear} statewide results for each assessment. Grade cut-offs and the spread of results change a little each year, so treat it as a guide.`
+            : moderating
+              ? "Moderated SACs are estimated from your position in your class and your school's published VCAA results. Your class's actual exam results, which VCAA uses, aren't known in advance, so treat them as a range."
+              : "VCAA rescales each school's SAC scores to match how that school's students do on the exam, so your raw school percentage can move up or down. Use \"Adjust for my school\" to estimate it."}
         </p>
       </aside>
     </div>

@@ -163,20 +163,41 @@ export function estimateStudyScore(study: Study, scores: number[], rho = DEFAULT
  * other GAs fixed. Returns null if unreachable even with full marks.
  */
 export function requiredScore(study: Study, scores: number[], index: number, target: number, rho = DEFAULT_RHO): number | null {
-  const ga = study.assessment!.gas[index];
-  const f = (x: number) => {
+  const p = requiredFraction(study, scores, [index], target, rho);
+  return p === null ? null : p * study.assessment!.gas[index].max;
+}
+
+/**
+ * Fraction of full marks (0..1) needed on every GA in `indices` at once, all at the same
+ * percentage, to reach a target study score while the other GAs stay as entered.
+ * Returns 0 if the target is already reached with zero on those GAs, null if unreachable.
+ */
+export function requiredFraction(study: Study, scores: number[], indices: number[], target: number, rho = DEFAULT_RHO): number | null {
+  const gas = study.assessment!.gas;
+  const f = (p: number) => {
     const s = scores.slice();
-    s[index] = x;
+    for (const i of indices) s[i] = p * gas[i].max;
     return estimateStudyScore(study, s, rho).studyScore;
   };
-  if (f(ga.max) < target) return null;
+  if (f(1) < target) return null;
   if (f(0) >= target) return 0;
   let lo = 0;
-  let hi = ga.max;
+  let hi = 1;
   for (let k = 0; k < 40; k++) {
     const mid = (lo + hi) / 2;
     if (f(mid) >= target) hi = mid;
     else lo = mid;
   }
   return hi;
+}
+
+/**
+ * Study score change from lifting GA `index` by `points` percentage points (capped at full
+ * marks), others held fixed. Shows which assessment moves the study score most.
+ */
+export function studyScoreGain(study: Study, scores: number[], index: number, points = 5, rho = DEFAULT_RHO): number {
+  const ga = study.assessment!.gas[index];
+  const s = scores.slice();
+  s[index] = Math.min(ga.max, s[index] + (points / 100) * ga.max);
+  return estimateStudyScore(study, s, rho).studyScore - estimateStudyScore(study, scores, rho).studyScore;
 }

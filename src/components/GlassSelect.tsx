@@ -20,6 +20,11 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
+  const menuRef = useRef<HTMLUListElement>(null);
+  // Press on the button, drag onto an option and release to pick it (like a native menu).
+  const press = useRef<{ x: number; y: number; t: number; moved: boolean } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const suppressClick = useRef(false);
   const current = options.find((o) => o.value === value) ?? options[0];
 
   useEffect(() => {
@@ -41,6 +46,48 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     buttonRef.current?.focus();
   };
 
+  const optionAt = (x: number, y: number): number | null => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[role="option"]');
+    if (!el || !menuRef.current?.contains(el)) return null;
+    return Number(el.dataset.index);
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+    const move = (e: PointerEvent) => {
+      const p = press.current;
+      if (!p) return;
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 4) p.moved = true;
+      const i = optionAt(e.clientX, e.clientY);
+      if (i !== null) setActive(i);
+    };
+    const up = (e: PointerEvent) => {
+      const p = press.current;
+      press.current = null;
+      setDragging(false);
+      if (!p) return;
+      const i = optionAt(e.clientX, e.clientY);
+      // A click only follows if the release lands back on the button.
+      suppressClick.current = !!buttonRef.current?.contains(document.elementFromPoint(e.clientX, e.clientY));
+      const held = p.moved || performance.now() - p.t > 300;
+      if (i !== null && held) choose(i);
+      else if (p.moved && !buttonRef.current?.contains(document.elementFromPoint(e.clientX, e.clientY))) setOpen(false);
+      // Otherwise it was a plain click: leave the menu open.
+    };
+    const cancel = () => {
+      press.current = null;
+      setDragging(false);
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', cancel);
+    return () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', cancel);
+    };
+  }, [dragging]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="gselect" ref={ref}>
       <button
@@ -51,7 +98,24 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
         aria-expanded={open}
         aria-controls={listId}
         aria-label={`${label}: ${current.label}`}
-        onClick={() => (open ? setOpen(false) : openMenu())}
+        onPointerDown={(e) => {
+          if (e.button !== 0 || open) return;
+          // Release pointer capture so moves report the element under the finger, not the button.
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+          press.current = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
+          suppressClick.current = true;
+          setDragging(true);
+          openMenu();
+        }}
+        onClick={() => {
+          // The press already opened the menu; the click that follows shouldn't close it.
+          if (suppressClick.current) {
+            suppressClick.current = false;
+            return;
+          }
+          if (open) setOpen(false);
+          else openMenu();
+        }}
         onKeyDown={(e) => {
           if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
             e.preventDefault();
@@ -77,11 +141,12 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
         </svg>
       </button>
       {open && (
-        <ul className="gselect-menu glass" role="listbox" id={listId} aria-label={label}>
+        <ul ref={menuRef} className={`gselect-menu glass${dragging ? ' dragging' : ''}`} role="listbox" id={listId} aria-label={label}>
           {options.map((o, i) => (
             <li
               key={String(o.value)}
               role="option"
+              data-index={i}
               aria-selected={o.value === value}
               className={`${i === active ? 'active' : ''} ${o.value === value ? 'selected' : ''}`}
               onMouseEnter={() => setActive(i)}
