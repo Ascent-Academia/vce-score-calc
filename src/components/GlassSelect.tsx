@@ -36,6 +36,8 @@ const MAX_STRETCH_Y = 64;
 const MAX_STRETCH_X = 40;
 /** How far outside the menu (px) a drag still steers it; beyond this the drag lets go. */
 const ZONE_X = 180;
+/** Releasing more than this far (px) beside the menu cancels instead of picking. */
+const RELEASE_SLOP_X = 8;
 const ZONE_Y = 200;
 
 /** iOS-style rubber band, as in the tab bar: grows with the overshoot but never exceeds `max`. */
@@ -208,8 +210,11 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
       const held = press.moved || performance.now() - press.t > HOLD_MS;
       const wasFollowing = latest.current.following;
       setStretch({ x: 0, y: 0 });
-      // Released on the menu, or while steering it from just outside: pick the highlighted year.
-      if (pt !== null && (wasFollowing || (pt.dx === 0 && pt.rel >= 0 && pt.rel <= pt.h))) {
+      // Pick the highlighted year only when released over the menu's width. Above or below it
+      // still counts (that's how you reach the first or last year), but letting go beside the
+      // menu after a sideways pull cancels, so stretching it never changes the year by surprise.
+      const besideMenu = pt !== null && Math.abs(pt.dx) > RELEASE_SLOP_X;
+      if (pt !== null && !besideMenu && (wasFollowing || (pt.rel >= 0 && pt.rel <= pt.h))) {
         // From the button, a quick click that happens to end on the menu shouldn't pick anything.
         if (press.from === 'menu' || held) choose(nearestRow(Math.max(0, Math.min(pt.h, pt.rel))));
         else setDragY(null);
