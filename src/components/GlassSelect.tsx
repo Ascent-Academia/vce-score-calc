@@ -31,12 +31,12 @@ const HOLD_MS = 300;
 /** Length of the close animation (ms), matching .gselect-menu.closing in CSS. */
 const CLOSE_MS = 170;
 /** Most the menu can stretch (px) when the highlight is pulled past the first or last option. */
-const MAX_STRETCH_Y = 26;
+const MAX_STRETCH_Y = 64;
 /** Most the menu can stretch (px) when the pointer pulls sideways off it. */
-const MAX_STRETCH_X = 14;
+const MAX_STRETCH_X = 40;
 /** How far outside the menu (px) a drag still steers it; beyond this the drag lets go. */
-const ZONE_X = 72;
-const ZONE_Y = 90;
+const ZONE_X = 180;
+const ZONE_Y = 200;
 
 /** iOS-style rubber band, as in the tab bar: grows with the overshoot but never exceeds `max`. */
 const rubberBand = (over: number, max: number) => (1 - 1 / ((over * 0.55) / max + 1)) * max;
@@ -249,7 +249,7 @@ export function GlassSelect<T extends string | number>({ label, value, options, 
     ...(stretching
       ? {
           // Pulling up or down makes the menu taller and slightly thinner; sideways makes it wider.
-          '--stretch-x': 1 + Math.abs(stretch.x) / menuW - Math.abs(stretch.y) / 500,
+          '--stretch-x': 1 + Math.abs(stretch.x) / menuW - Math.abs(stretch.y) / 1200,
           '--stretch-y': 1 + Math.abs(stretch.y) / menuH,
         }
       : {}),
