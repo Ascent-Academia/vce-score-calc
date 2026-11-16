@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import logo from './assets/ascent-logo.svg?raw';
 import mark from './assets/ascent-mark.svg?raw';
 import { AtarCalculator, newUid, type SubjectRow } from './components/AtarCalculator';
@@ -81,6 +81,7 @@ export default function App() {
     }
   }, [estimateFor.studyId]);
   const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     try {
@@ -96,7 +97,8 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 2000);
     } catch {
       location.hash = `s=${s}`;
     }
@@ -133,9 +135,27 @@ export default function App() {
             onChange={setYear}
             options={YEARS.map((y) => ({ value: y, label: String(y), hint: y === LATEST_YEAR ? 'Latest' : undefined }))}
           />
-          <button type="button" className="glass-btn" onClick={share} title="Copy a link to your ATAR subjects and study scores">
-            {copied ? 'Link copied' : 'Share'}
+          <button
+            type="button"
+            className={`glass-btn share-btn${copied ? ' copied' : ''}`}
+            onClick={share}
+            aria-label={copied ? 'Link copied' : 'Copy a link to your subjects and study scores'}
+            title={copied ? undefined : 'Copy share link'}
+          >
+            <svg className="share-link" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            <svg className="share-check" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+            <span className="share-tip" aria-hidden="true">
+              Link copied
+            </span>
           </button>
+          <span className="sr-only" role="status">
+            {copied ? 'Link copied to clipboard' : ''}
+          </span>
         </div>
       </header>
 
