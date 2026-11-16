@@ -551,8 +551,10 @@ function GradeBar({ ga, score, entered, onChange }: GradeBarProps) {
   const shown = value ?? 0;
 
   const pctAt = (clientX: number) => {
+    // Matches the thumb's travel, which stops half a thumb short of each end.
     const r = trackRef.current!.getBoundingClientRect();
-    return Math.round(Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * 100);
+    const half = 8;
+    return Math.round(Math.max(0, Math.min(1, (clientX - r.left - half) / (r.width - 2 * half))) * 100);
   };
   const set = (p: number) => {
     const v = Math.max(0, Math.min(100, Math.round(p)));
@@ -600,11 +602,11 @@ function GradeBar({ ga, score, entered, onChange }: GradeBarProps) {
             <span>{g.grade}</span>
           </div>
         ))}
-        <div className="gradebar-fill" style={{ width: `${shown}%` }} />
+        <div className="gradebar-fill" style={{ width: `calc(var(--thumb-w) / 2 + (100% - var(--thumb-w)) * ${shown / 100})` }} />
         {showModerated && <div className="gradebar-mark moderated" style={{ left: `${moderatedPct}%` }} title="After moderation" />}
       </div>
       {value !== null && (
-        <div className="gradebar-thumb" style={{ left: `${shown}%` }}>
+        <div className="gradebar-thumb" style={{ left: `calc((100% - var(--thumb-w)) * ${shown / 100})` }}>
           {dragging && <span className="gradebar-tip">{shown.toFixed(0)}% · {gradeNow}</span>}
         </div>
       )}

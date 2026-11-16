@@ -126,7 +126,6 @@ export default function App() {
         </a>
         <div className="brand-title">
           <h1>VCE ATAR &amp; Study Score Calculator</h1>
-          <p>Built on official VCAA and VTAC data</p>
         </div>
         <div className="top-controls">
           <GlassSelect
